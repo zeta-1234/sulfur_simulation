@@ -3,7 +3,17 @@
     "version": "0.2",
     "language": "en",
     "words": [],
-    "ignoreWords": [],
+    "ignoreWords": [
+        "Phonopy",
+        "Wannier",
+        "pytest",
+        "pyright",
+        "pydata",
+        "pylint",
+        "pydocstyle",
+        "numpy",
+        "isort"
+    ],
     "flagWords": [
         "hte",
         "teh"

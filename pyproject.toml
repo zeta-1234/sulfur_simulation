@@ -1,7 +1,7 @@
 [project]
 name = "phonon_simulation"
 version = "0.0.1"
-description = "Analysis of Phonons, using Phonopy and Wannier Interploation"
+description = "Analysis of Phonons, using Phonopy and Wannier Interpolation"
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
 dependencies = []
