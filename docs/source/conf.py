@@ -1,4 +1,4 @@
-project = "Slate"
+project = "Phonon Simulation"
 author = "Matthew Ord"
 version = "0.0.1"
 
