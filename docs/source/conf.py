@@ -1,4 +1,4 @@
-project = "Phonon Simulation"
+project = "Sulfur Simulation"
 author = "Matthew Ord"
 version = "0.0.1"
 
@@ -9,4 +9,4 @@ exclude_patterns = []
 
 
 html_theme = "pydata_sphinx_theme"
-html_static_path = ["_static"]
+html_static_path = []

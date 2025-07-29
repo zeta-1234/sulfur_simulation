@@ -39,7 +39,7 @@
 				"python.testing.pytestEnabled": true,
 				"python.analysis.diagnosticMode": "openFilesOnly",
 				"python.analysis.include": [
-					"phonon_simulation"
+					"sulfur_simulation"
 				],
 				"python.analysis.autoImportCompletions": true
 			},

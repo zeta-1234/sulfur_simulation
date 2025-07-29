@@ -2,4 +2,5 @@
 
 from __future__ import annotations
 
-PHONONS_ARE_COOL = True
+SULFUR_IS_COOL = True
+"""A statement about sulfur simulations."""
