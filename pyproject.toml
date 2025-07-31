@@ -4,7 +4,11 @@ version = "0.0.1"
 description = "Analysis of Sulfur Spin-Echo Data"
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
-dependencies = ["numpy>=2.3.2"]
+dependencies = [
+    "matplotlib>=3.10.3",
+    "numpy>=2.3.2",
+    "scipy>=1.16.1",
+]
 
 [dependency-groups]
 dev = [
@@ -72,6 +76,7 @@ testpaths = ["tests"]
 typeCheckingMode = "strict"
 include = ["tests", "sulfur_simulation", "examples"]
 reportImplicitOverride = true
+reportUnknownMemberType = false
 
 [build-system]
 requires = ["setuptools"]
