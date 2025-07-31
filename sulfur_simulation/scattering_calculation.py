@@ -1,18 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-n_directions = 4
-directions = {
-    0: np.array([1, 0]),  # RIGHT
-    1: np.array([-1, 0]),  # LEFT
-    2: np.array([0, 1]),  # UP
-    3: np.array([0, -1]),  # DOWN
-}
-rng = np.random.default_rng()
+if TYPE_CHECKING:
+    from numpy.random import Generator
 
 
 def get_delta_k(
@@ -25,9 +19,20 @@ def get_delta_k(
 
 
 def update_position(
-    position: np.ndarray, hopping_probability: float
+    position: np.ndarray,
+    hopping_probability: float,
+    lattice_spacing: float,
+    rng: Generator,
 ) -> np.ndarray:  # temp function to enable simple random diffusion
     """Update the position of the particle."""
+    n_directions = 4
+    directions = {
+        0: np.array([lattice_spacing, 0]),  # RIGHT
+        1: np.array([-1 * lattice_spacing, 0]),  # LEFT
+        2: np.array([0, lattice_spacing]),  # UP
+        3: np.array([0, -1 * lattice_spacing]),  # DOWN
+    }
+
     if rng.random() < hopping_probability:
         direction = int(rng.integers(low=0, high=n_directions))
         return position + directions[direction]
@@ -56,7 +61,7 @@ class SimulationParameters:
     """Angle of incidence of helium"""
     lattice_spacing: float = 2.5
     "Spacing of lattice in Angstroms"
-    step: float = 1
+    step: int = 1
     """Step size in simulation"""
     hopping_probability: float = 0.01
     """The probability of hopping to a new position at each step."""
