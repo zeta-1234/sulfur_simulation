@@ -18,11 +18,19 @@ def get_amplitude(
 class SimulationParameters:
     """Parameters for simulating diffusion."""
 
-    delta: float  # TODO: docs
+    incident_wavevector: np.ndarray
+    "The incident wavevector of the helium beam"
+    total_scattering_angle: float
+    """Total angle scattered through"""
     n_timesteps: int
-    gamma: float  # TODO: docs
-
-    step: float = 1  # TODO: docs
-    hopping_probability: float = 0.01  # TODO: docs
+    """Number of timesteps"""
+    angle_of_incidence: float
+    """Angle of incidence of helium"""
+    lattice_spacing: float = 2.5
+    "Spacing of lattice in Angstroms"
+    step: float = 1
+    """Step size in simulation"""
+    hopping_probability: float = 0.01
     """The probability of hopping to a new position at each step."""
-    form_factor: float = 1  # TODO: docs
+    form_factor: float = 1
+    """Prefactor for scattered amplitude"""
