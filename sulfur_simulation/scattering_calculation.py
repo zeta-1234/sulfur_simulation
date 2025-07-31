@@ -18,11 +18,11 @@ def get_amplitude(
 class SimulationParameters:
     """Parameters for simulating diffusion."""
 
-    delta: float
-    duration: float
-    gamma: float
+    delta: float  # TODO: docs
+    n_timesteps: int
+    gamma: float  # TODO: docs
 
-    step: float = 1
-    hopping_probability: float = 0.01
+    step: float = 1  # TODO: docs
+    hopping_probability: float = 0.01  # TODO: docs
     """The probability of hopping to a new position at each step."""
-    form_factor: float = 1
+    form_factor: float = 1  # TODO: docs
