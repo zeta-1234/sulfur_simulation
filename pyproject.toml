@@ -4,9 +4,7 @@ version = "0.0.1"
 description = "Analysis of Sulfur Spin-Echo Data"
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
-dependencies = [
-    "numpy>=2.3.2",
-]
+dependencies = ["numpy>=2.3.2"]
 
 [dependency-groups]
 dev = [
@@ -72,7 +70,7 @@ testpaths = ["tests"]
 
 [tool.pyright]
 typeCheckingMode = "strict"
-include = ["tests", "phonon_simulation", "examples"]
+include = ["tests", "sulfur_simulation", "examples"]
 reportImplicitOverride = true
 
 [build-system]
