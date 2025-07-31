@@ -1,15 +1,20 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 from scipy.optimize import curve_fit  # type: ignore library types
 
+from sulfur_simulation.util import get_figure
+
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
+    from matplotlib.figure import Figure, SubFigure
 
 
-def autocorrelate(x: np.ndarray) -> np.ndarray:  # cspell:ignore ndarray
+def _get_autocorrelation(
+    x: np.ndarray[Any, np.dtype[np.float64]],
+) -> np.ndarray[Any, np.dtype[np.float64]]:
     """
     Compute the autocorrelation of the 1D signal x.
 
@@ -22,41 +27,30 @@ def autocorrelate(x: np.ndarray) -> np.ndarray:  # cspell:ignore ndarray
     return autocorr
 
 
-"""Define a generic exponential for fitting to autocorrelation data"""
-
-
-def exp_func(x: np.ndarray, a: float, b: float, c: float) -> np.ndarray:
+def _gaussian_decay_function(
+    x: np.ndarray[Any, np.dtype[np.float64]], a: float, b: float, c: float
+) -> np.ndarray[Any, np.dtype[np.float64]]:
     """Return a generic exponential function."""
     return a * np.exp(b * x) + c
 
 
-"""Fit exponential and plot with autocorrelate data"""
+def plot_autocorrelation(
+    x: np.ndarray[Any, np.dtype[np.float64]], t: np.ndarray, *, ax: Axes | None = None
+) -> tuple[Figure | SubFigure, Axes]:
+    """Plot autocorrelation data with an exponential curve fit on a given axis."""
+    fig, ax = get_figure(ax=ax)
+    autocorrelation = _get_autocorrelation(x)
+    optimal_params, _ = curve_fit(  # type: ignore types defined by curve_fit
+        _gaussian_decay_function, t, autocorrelation, p0=(1, -1, 1)
+    )
+    optimal_params = cast("tuple[float, float, float]", optimal_params)
 
-
-def plot(autocorr: np.ndarray, t: np.ndarray, ax: Axes) -> tuple[Axes, float]:
-    """Plot autocorrelation data with an exponential curve fit on a given axis.
-
-    Args:
-        autocorr (np.ndarray): Autocorrelated amplitude
-        t (np.ndarray): Time
-        axis (Axes): Passed axis
-
-    Returns
-    -------
-        Axes: Returns plotted axes and fitted b value in exp(-bt)
-
-
-    """
-    popt, _pcov = curve_fit(exp_func, t, autocorr, p0=(1, -1, 1))  # type: ignore types defined by curve_fit
-    popt = cast("np.ndarray", popt)
-    b_fit: float = float(popt[1])
-
-    ax.plot(t, autocorr, label="data")
-    ax.plot(t, exp_func(t, *popt), "r-", label="Fitted Curve")
+    ax.plot(t, autocorrelation, label="data")
+    ax.plot(t, _gaussian_decay_function(t, *optimal_params), "r-", label="Fitted Curve")
     ax.legend()
     ax.set_title("Autocorrelation of A")
     ax.set_xlabel("Lag")
     ax.set_ylabel("Autocorrelation")
     ax.grid(visible=True)
 
-    return ax, b_fit
+    return fig, ax

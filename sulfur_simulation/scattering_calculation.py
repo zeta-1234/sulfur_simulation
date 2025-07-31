@@ -1,23 +1,28 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+from typing import Any
+
 import numpy as np
 
-from examples.simulation import SimulationParameters
 
-params = SimulationParameters(delta=1.2, duration=5000, gamma=1, step=2)
+def get_amplitude(
+    delta_k: np.ndarray,
+    position: np.ndarray[Any, np.dtype[np.float64]],
+) -> complex:
+    """Calculate the complex amplitude for a given delta_k and position."""
+    return np.exp(-1j * np.dot(delta_k, position))
 
-A = np.array([params.form_factor + 0j])
 
+@dataclass(kw_only=True, frozen=True)
+class SimulationParameters:
+    """Parameters for simulating diffusion."""
 
-def a_value(del_k: np.ndarray, r: np.ndarray) -> complex:  # cspell:ignore ndarray
-    """Calculate the complex amplitude for a given del_k and position.
+    delta: float  # TODO: docs
+    n_timesteps: int
+    gamma: float  # TODO: docs
 
-    Args:
-        del_k (np.ndarray): Change in momentum
-        r (np.ndarray): Position
-
-    Returns
-    -------
-        float: complex amplitude
-    """
-    return np.exp(-1j * np.dot(del_k, r))
+    step: float = 1  # TODO: docs
+    hopping_probability: float = 0.01  # TODO: docs
+    """The probability of hopping to a new position at each step."""
+    form_factor: float = 1  # TODO: docs
