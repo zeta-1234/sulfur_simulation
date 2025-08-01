@@ -1,20 +1,38 @@
 from __future__ import annotations
 
+import matplotlib.pyplot as plt
 import numpy as np
 
+from sulfur_simulation.isf import (
+    get_dephasing_rates,
+    plot_autocorrelation,
+    plot_dephasing_rates,
+)
 from sulfur_simulation.scattering_calculation import (
+    ResultParameters,
     SimulationParameters,
+    get_10_delta_k,
+    get_amplitude,
     update_position,
 )
 
 if __name__ == "__main__":
     # Create a simulation with 5000 timesteps
     params = SimulationParameters(
-        total_scattering_angle=1.2,
-        angle_of_incidence=0.8,
-        n_timesteps=5000,
+        n_timesteps=2000,
         step=1,
-        incident_wavevector=np.array([3, 6]),
+    )
+
+    result_params = ResultParameters(n_delta_k_intervals=500, delta_k_max=2.5)
+
+    if result_params.delta_k_min == 0:
+        msg = "delta_k_min should not be zero"
+        raise ValueError(msg)
+
+    delta_k_array = get_10_delta_k(
+        n_delta_k=result_params.n_delta_k_intervals,
+        min_delta_k=result_params.delta_k_min,
+        max_delta_k=result_params.delta_k_max,
     )
 
     rng = np.random.default_rng()  # create generator for random numbers
@@ -39,6 +57,20 @@ if __name__ == "__main__":
         0, params.n_timesteps + 1, params.step
     )  # lists times for steps for later plotting
 
-    print(positions[:, 0])  # x positions
-    print(positions[:, 1])  # y positions
-    print(time)
+    amplitudes = get_amplitude(  # calculating scattered amplitude from positions
+        delta_k=delta_k_array,
+        position=positions,
+        form_factor=params.form_factor,
+    )
+
+    fig, ax = plot_autocorrelation(x=amplitudes[100], t=time)
+
+    plt.show()
+
+    dephasing_rates = get_dephasing_rates(amplitudes=amplitudes, t=time)
+
+    fig, ax = plot_dephasing_rates(
+        dephasing_rates=dephasing_rates, delta_k=delta_k_array
+    )
+
+    plt.show()

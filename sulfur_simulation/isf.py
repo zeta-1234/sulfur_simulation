@@ -20,8 +20,8 @@ def _get_autocorrelation(
 
     Returns autocorrelation normalized to 1 at lag 0.
     """
-    x -= np.mean(x)  # Remove mean
-    result = np.correlate(x, x, mode="full")
+    x_centered = x - np.mean(x)  # Remove mean
+    result = np.correlate(x_centered, x_centered.conj(), mode="full")
     autocorr = result[result.size // 2 :]  # Take second half (non-negative lags)
     autocorr /= autocorr[0]  # Normalize
     return autocorr
@@ -51,6 +51,32 @@ def plot_autocorrelation(
     ax.set_title("Autocorrelation of A")
     ax.set_xlabel("Lag")
     ax.set_ylabel("Autocorrelation")
+    ax.grid(visible=True)
+
+    return fig, ax
+
+
+def get_dephasing_rates(amplitudes: np.ndarray, t: np.ndarray) -> np.ndarray:
+    """Calculate dephasing rates for all amplitudes."""
+    dephasing_rates = np.empty(len(amplitudes))
+    for i in range(len(amplitudes)):
+        autocorrelation = _get_autocorrelation(amplitudes[i])
+        optimal_params, _ = curve_fit(  # type: ignore types defined by curve_fit
+            _gaussian_decay_function, t, autocorrelation, p0=(1, -1, 1)
+        )
+        dephasing_rates[i] = optimal_params[1] * -1
+    return dephasing_rates
+
+
+def plot_dephasing_rates(
+    dephasing_rates: np.ndarray, delta_k: np.ndarray, *, ax: Axes | None = None
+) -> tuple[Figure | SubFigure, Axes]:
+    """Plot dephasing rates against delta_k values."""
+    fig, ax = get_figure(ax=ax)
+    ax.plot(delta_k, dephasing_rates)
+    ax.set_title("Dephasing rate vs Delta_K values")
+    ax.set_xlabel("delta_k")
+    ax.set_ylabel("dephasing rate")
     ax.grid(visible=True)
 
     return fig, ax

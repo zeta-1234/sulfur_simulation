@@ -9,15 +9,6 @@ if TYPE_CHECKING:
     from numpy.random import Generator
 
 
-def get_delta_k(
-    angle_of_incidence: float, total_scattering_angle: float, wavevector: np.ndarray
-) -> np.ndarray[Any, np.dtype[np.float64]]:
-    """Calculate delta_k for given angles and incident wavevector."""
-    return wavevector * (
-        np.sin(total_scattering_angle - angle_of_incidence) - np.sin(angle_of_incidence)
-    )
-
-
 def update_position(
     position: np.ndarray,
     hopping_probability: float,
@@ -40,25 +31,29 @@ def update_position(
 
 
 def get_amplitude(
+    form_factor: float,
     delta_k: np.ndarray,
     position: np.ndarray[Any, np.dtype[np.float64]],
-) -> complex:
+) -> np.ndarray:
     """Calculate the complex amplitude for a given delta_k and position."""
-    return np.exp(-1j * np.dot(delta_k, position))
+    return form_factor * np.exp(-1j * delta_k @ position.T)
+
+
+def get_10_delta_k(
+    n_delta_k: int, max_delta_k: float, min_delta_k: float
+) -> np.ndarray:
+    """Return a matrix of delta_k values in the [1,0] direction."""
+    delta_k_x = np.linspace(start=min_delta_k, stop=max_delta_k, num=n_delta_k)
+    delta_k_y = np.zeros(n_delta_k)
+    return np.stack([delta_k_x, delta_k_y], axis=1)
 
 
 @dataclass(kw_only=True, frozen=True)
 class SimulationParameters:
     """Parameters for simulating diffusion."""
 
-    incident_wavevector: np.ndarray
-    "The incident wavevector of the helium beam"
-    total_scattering_angle: float
-    """Total angle scattered through"""
     n_timesteps: int
     """Number of timesteps"""
-    angle_of_incidence: float
-    """Angle of incidence of helium"""
     lattice_spacing: float = 2.5
     "Spacing of lattice in Angstroms"
     step: int = 1
@@ -67,3 +62,15 @@ class SimulationParameters:
     """The probability of hopping to a new position at each step."""
     form_factor: float = 1
     """Prefactor for scattered amplitude"""
+
+
+@dataclass(kw_only=True, frozen=True)
+class ResultParameters:
+    """Parameters for plotting results of simulation."""
+
+    n_delta_k_intervals: int
+    """The number of delta_k values to use"""
+    delta_k_max: float
+    """The max value of delta_k"""
+    delta_k_min: float = 0.1
+    """The min value of delta_k"""
