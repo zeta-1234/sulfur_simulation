@@ -10,6 +10,7 @@ from sulfur_simulation.util import get_figure
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
     from matplotlib.figure import Figure, SubFigure
+    from numpy.typing import NDArray
 
 
 def _get_autocorrelation(
@@ -21,7 +22,8 @@ def _get_autocorrelation(
     Returns autocorrelation normalized to 1 at lag 0.
     """
     x_centered = x - np.mean(x)  # Remove mean
-    result = np.correlate(x_centered, x_centered.conj(), mode="full")
+    x_centered_magnitude = np.abs(x_centered)
+    result = np.correlate(x_centered_magnitude, x_centered_magnitude, mode="full")
     autocorr = result[result.size // 2 :]  # Take second half (non-negative lags)
     autocorr /= autocorr[0]  # Normalize
     return autocorr
@@ -40,10 +42,8 @@ def plot_autocorrelation(
     """Plot autocorrelation data with an exponential curve fit on a given axis."""
     fig, ax = get_figure(ax=ax)
     autocorrelation = _get_autocorrelation(x)
-    optimal_params, _ = curve_fit(  # type: ignore types defined by curve_fit
-        _gaussian_decay_function, t, autocorrelation, p0=(1, -1, 1)
-    )
-    optimal_params = cast("tuple[float, float, float]", optimal_params)
+
+    optimal_params = _fit_gaussian_decay(t=t, autocorrelation=autocorrelation)
 
     ax.plot(t, autocorrelation, label="data")
     ax.plot(t, _gaussian_decay_function(t, *optimal_params), "r-", label="Fitted Curve")
@@ -56,14 +56,30 @@ def plot_autocorrelation(
     return fig, ax
 
 
+def _fit_gaussian_decay(
+    t: np.ndarray, autocorrelation: np.ndarray, slope_threshold: float = 1e-3
+) -> NDArray[np.float64]:
+    derivative = np.gradient(autocorrelation, t)
+    flat_indices = np.where(np.abs(derivative) < slope_threshold)[0]
+    cutoff_index = len(t) if len(flat_indices) == 0 else flat_indices[0]
+
+    optimal_params, _ = curve_fit(  # type: ignore types defined by curve_fit
+        _gaussian_decay_function,
+        t[:cutoff_index],
+        autocorrelation[:cutoff_index],
+        p0=(1, -0.005, 1),
+        bounds=([0, -np.inf, -np.inf], [np.inf, 0, np.inf]),
+    )
+
+    return cast("NDArray[np.float64]", optimal_params)
+
+
 def get_dephasing_rates(amplitudes: np.ndarray, t: np.ndarray) -> np.ndarray:
     """Calculate dephasing rates for all amplitudes."""
     dephasing_rates = np.empty(len(amplitudes))
     for i in range(len(amplitudes)):
         autocorrelation = _get_autocorrelation(amplitudes[i])
-        optimal_params, _ = curve_fit(  # type: ignore types defined by curve_fit
-            _gaussian_decay_function, t, autocorrelation, p0=(1, -1, 1)
-        )
+        optimal_params = _fit_gaussian_decay(t=t, autocorrelation=autocorrelation)
         dephasing_rates[i] = optimal_params[1] * -1
     return dephasing_rates
 

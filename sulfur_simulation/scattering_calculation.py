@@ -62,6 +62,8 @@ class SimulationParameters:
     """The probability of hopping to a new position at each step."""
     form_factor: float = 1
     """Prefactor for scattered amplitude"""
+    n_runs: int
+    "The number of times to run the simulation"
 
 
 @dataclass(kw_only=True, frozen=True)

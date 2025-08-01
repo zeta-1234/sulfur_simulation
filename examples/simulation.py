@@ -18,12 +18,9 @@ from sulfur_simulation.scattering_calculation import (
 
 if __name__ == "__main__":
     # Create a simulation with 5000 timesteps
-    params = SimulationParameters(
-        n_timesteps=2000,
-        step=1,
-    )
+    params = SimulationParameters(n_timesteps=2000, step=1, n_runs=700)
 
-    result_params = ResultParameters(n_delta_k_intervals=500, delta_k_max=2.5)
+    result_params = ResultParameters(n_delta_k_intervals=250, delta_k_max=2.5)
 
     if result_params.delta_k_min == 0:
         msg = "delta_k_min should not be zero"
@@ -35,42 +32,52 @@ if __name__ == "__main__":
         max_delta_k=result_params.delta_k_max,
     )
 
-    rng = np.random.default_rng()  # create generator for random numbers
-    position = np.array([0, 0])  # defines the initial position
+    n_runs = params.n_runs
+
     n_steps = params.n_timesteps // params.step + 1  # calculates the number of steps
+    amplitudes_all = np.empty(
+        (n_runs, len(delta_k_array), n_steps), dtype=np.complex128
+    )
 
-    positions = np.empty((n_steps, 2))  # generates empty array for positions
-    positions[0] = position
+    for i in range(n_runs):
+        rng = np.random.default_rng(seed=i)
+        position = np.array([0, 0])  # defines the initial position
+        positions = np.empty((n_steps, 2))  # generates empty array for positions
+        positions[0] = position
 
-    for index in range(
-        1, n_steps
-    ):  # loops over update_position() and saves result to positions array
-        position = update_position(
-            position=position,
-            hopping_probability=params.hopping_probability,
-            lattice_spacing=params.lattice_spacing,
-            rng=rng,
+        for index in range(
+            1, n_steps
+        ):  # loops over update_position() and saves result to positions array
+            position = update_position(
+                position=position,
+                hopping_probability=params.hopping_probability,
+                lattice_spacing=params.lattice_spacing,
+                rng=rng,
+            )
+            positions[index] = position
+
+        amplitudes = get_amplitude(  # calculating scattered amplitude from positions
+            delta_k=delta_k_array,
+            position=positions,
+            form_factor=params.form_factor,
         )
-        positions[index] = position
+
+        amplitudes_all[i] = amplitudes
+
+    average_amplitudes = np.mean(amplitudes_all, axis=0)
 
     time = np.arange(
         0, params.n_timesteps + 1, params.step
     )  # lists times for steps for later plotting
 
-    amplitudes = get_amplitude(  # calculating scattered amplitude from positions
-        delta_k=delta_k_array,
-        position=positions,
-        form_factor=params.form_factor,
-    )
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
 
-    fig, ax = plot_autocorrelation(x=amplitudes[100], t=time)
+    plot_autocorrelation(x=average_amplitudes[85], t=time, ax=ax1)
 
-    plt.show()
+    dephasing_rates = get_dephasing_rates(amplitudes=average_amplitudes, t=time)
 
-    dephasing_rates = get_dephasing_rates(amplitudes=amplitudes, t=time)
-
-    fig, ax = plot_dephasing_rates(
-        dephasing_rates=dephasing_rates, delta_k=delta_k_array
+    plot_dephasing_rates(
+        dephasing_rates=dephasing_rates, delta_k=delta_k_array[:, 0], ax=ax2
     )
 
     plt.show()
