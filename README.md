@@ -36,3 +36,4 @@ where `--dev` adds it to the development dependencies.
 1. Rewrite update_position to calculate probabilities for lattice to enable particle interaction and other effects
 
 2. Add functionality to simulate square and hcp lattice
+
