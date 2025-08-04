@@ -22,9 +22,7 @@ if __name__ == "__main__":
 
     isf_params = ISFParameters(n_delta_k_intervals=250, delta_k_max=2.5)
 
-    n_runs = 700
-
-    positions = run_multiple_simulations(params, n_runs)
+    positions = run_multiple_simulations(params, n_runs=700)
 
     amplitudes = get_amplitude(
         form_factor=isf_params.form_factor,

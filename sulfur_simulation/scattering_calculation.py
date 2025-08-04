@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import numpy as np
+from tqdm import trange
 
 if TYPE_CHECKING:
     from numpy.random import Generator
@@ -30,37 +31,33 @@ def _update_position(
     return position
 
 
-def _run_simulation(
-    initial_position: np.ndarray,
-    hopping_probability: float,
-    lattice_spacing: float,
-    rng: Generator,
-    n_timesteps: int,
-) -> np.ndarray:
-    position = initial_position
-    positions = np.empty((n_timesteps, 2))
-    for i in range(1, n_timesteps):
+def run_simulation(
+    params: SimulationParameters, *, seed: int | None
+) -> np.ndarray[tuple[int, int], np.dtype[np.float64]]:
+    """Run a single simulation of particle diffusion."""
+    position = params.initial_position
+    positions = np.empty((params.n_timesteps, 2))
+    rng = np.random.default_rng(seed)
+    for i in range(1, params.n_timesteps):
         position = _update_position(
             position=position,
-            hopping_probability=hopping_probability,
-            lattice_spacing=lattice_spacing,
+            hopping_probability=params.hopping_probability,
+            lattice_spacing=params.lattice_spacing,
             rng=rng,
         )
         positions[i] = position
     return positions
 
 
-def run_multiple_simulations(params: SimulationParameters, n_runs: int) -> np.ndarray:
+def run_multiple_simulations(
+    params: SimulationParameters, *, n_runs: int, stable_seed: bool = False
+) -> np.ndarray[tuple[int, int, int], np.dtype[np.float64]]:
     """Run multiple simulations and returns all positions."""
     all_positions = np.empty((n_runs, params.n_timesteps, 2))
-    for i in range(n_runs):
-        rng = np.random.default_rng(seed=i)
-        position = _run_simulation(
-            initial_position=params.initial_position,
-            hopping_probability=params.hopping_probability,
-            lattice_spacing=params.lattice_spacing,
-            rng=rng,
-            n_timesteps=params.n_timesteps,
+    for i in trange(n_runs, desc="Running simulations"):
+        position = run_simulation(
+            params,
+            seed=i if stable_seed else None,
         )
         all_positions[i] = position
     return all_positions
