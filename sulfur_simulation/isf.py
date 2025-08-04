@@ -14,6 +14,38 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
 
+@dataclass(kw_only=True, frozen=True)
+class ISFParameters:
+    """Parameters for plotting results of simulation."""
+
+    n_delta_k_intervals: int
+    """The number of delta_k values to use"""
+    delta_k_max: float
+    """The max value of delta_k"""
+    delta_k_min: float = 0.1
+    """The min value of delta_k"""
+    form_factor: float = 1
+    """Prefactor for scattered amplitude"""
+    direction: tuple[int, int] = (1, 0)
+
+    def __post_init__(self) -> None:
+        if self.delta_k_min == 0:
+            msg = "delta_k_min should not be zero"
+            raise ValueError(msg)
+
+    @property
+    def delta_k_array(self) -> np.ndarray:
+        """All delta_k values."""
+        abs_delta_k = np.linspace(
+            start=self.delta_k_min,
+            stop=self.delta_k_max,
+            num=self.n_delta_k_intervals,
+            endpoint=True,
+        )
+
+        return np.asarray(self.direction)[np.newaxis, :] * abs_delta_k[:, np.newaxis]
+
+
 def _get_autocorrelation(
     x: np.ndarray[Any, np.dtype[np.float64]],
 ) -> np.ndarray[Any, np.dtype[np.float64]]:
@@ -100,56 +132,17 @@ def plot_dephasing_rates(
 
 
 def get_amplitude(
-    form_factor: float, delta_k: np.ndarray, position: np.ndarray
+    isf_params: ISFParameters,
+    position: np.ndarray[tuple[int, int, int], np.dtype[np.float64]],
 ) -> np.ndarray:
     """Calculate the complex amplitude for a given delta_k and position."""
     r, t, _ = position.shape
-    m = delta_k.shape[0]
+    m = isf_params.delta_k_array.shape[0]
 
     amplitudes = np.empty((r, t, m), dtype=np.complex128)
 
     for i in range(r):
-        phase = position[i] @ delta_k.T  # shape (t, m)
-        amplitudes[i] = form_factor * np.exp(-1j * phase)
+        phase = position[i] @ isf_params.delta_k_array.T
+        amplitudes[i] = isf_params.form_factor * np.exp(-1j * phase)
 
     return amplitudes
-
-
-def get_delta_k(
-    n_points: int,
-    delta_k_range: tuple[float, float],
-    direction: tuple[float, float] = (1, 0),
-) -> np.ndarray:
-    """Return a matrix of delta_k values in the [1,0] direction."""
-    abs_delta_k = np.linspace(
-        start=delta_k_range[0], stop=delta_k_range[1], num=n_points, endpoint=True
-    )
-
-    return np.asarray(direction)[np.newaxis, :] * abs_delta_k[:, np.newaxis]
-
-
-@dataclass(kw_only=True, frozen=True)
-class ISFParameters:
-    """Parameters for plotting results of simulation."""
-
-    n_delta_k_intervals: int
-    """The number of delta_k values to use"""
-    delta_k_max: float
-    """The max value of delta_k"""
-    delta_k_min: float = 0.1
-    """The min value of delta_k"""
-    form_factor: float = 1
-    """Prefactor for scattered amplitude"""
-
-    def __post_init__(self) -> None:
-        if self.delta_k_min == 0:
-            msg = "delta_k_min should not be zero"
-            raise ValueError(msg)
-
-    @property
-    def delta_k_array(self) -> np.ndarray:
-        """All delta_k values."""
-        return get_delta_k(
-            n_points=self.n_delta_k_intervals,
-            delta_k_range=(self.delta_k_min, self.delta_k_max),
-        )

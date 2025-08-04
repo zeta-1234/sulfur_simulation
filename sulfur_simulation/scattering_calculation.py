@@ -10,6 +10,25 @@ if TYPE_CHECKING:
     from numpy.random import Generator
 
 
+@dataclass(kw_only=True, frozen=True)
+class SimulationParameters:
+    """Parameters for simulating diffusion."""
+
+    n_timesteps: int
+    """Number of timesteps"""
+    initial_position: np.ndarray
+    """Initial position of particle"""
+    lattice_spacing: float = 2.5
+    """Spacing of lattice in Angstroms"""
+    hopping_probability: float = 0.01
+    """The probability of hopping to a new position at each step."""
+
+    @property
+    def times(self) -> np.ndarray:
+        """Times for simulation."""
+        return np.arange(0, self.n_timesteps)
+
+
 def _update_position(
     position: np.ndarray,
     hopping_probability: float,
@@ -61,22 +80,3 @@ def run_multiple_simulations(
         )
         all_positions[i] = position
     return all_positions
-
-
-@dataclass(kw_only=True, frozen=True)
-class SimulationParameters:
-    """Parameters for simulating diffusion."""
-
-    n_timesteps: int
-    """Number of timesteps"""
-    initial_position: np.ndarray
-    """Initial position of particle"""
-    lattice_spacing: float = 2.5
-    "Spacing of lattice in Angstroms"
-    hopping_probability: float = 0.01
-    """The probability of hopping to a new position at each step."""
-
-    @property
-    def times(self) -> np.ndarray:
-        """Times for simulation."""
-        return np.arange(0, self.n_timesteps)
