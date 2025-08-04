@@ -18,7 +18,8 @@
         "ylabel",
         "pyproject",
         "scipy",
-        "trange"
+        "trange",
+        "tqdm"
     ],
     "flagWords": [
         "hte",
