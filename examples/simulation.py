@@ -4,14 +4,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from sulfur_simulation.isf import (
+    ISFParameters,
+    get_amplitude,
     get_dephasing_rates,
     plot_autocorrelation,
     plot_dephasing_rates,
 )
 from sulfur_simulation.scattering_calculation import (
-    ResultParameters,
     SimulationParameters,
-    get_amplitude,
     run_multiple_simulations,
 )
 
@@ -20,15 +20,15 @@ if __name__ == "__main__":
 
     params = SimulationParameters(n_timesteps=2000, initial_position=np.array([0, 0]))
 
-    result_params = ResultParameters(n_delta_k_intervals=250, delta_k_max=2.5)
+    isf_params = ISFParameters(n_delta_k_intervals=250, delta_k_max=2.5)
 
     n_runs = 700
 
     positions = run_multiple_simulations(params, n_runs)
 
     amplitudes = get_amplitude(
-        form_factor=params.form_factor,
-        delta_k=result_params.delta_k_array,
+        form_factor=isf_params.form_factor,
+        delta_k=isf_params.delta_k_array,
         position=positions,
     )
 
@@ -42,7 +42,7 @@ if __name__ == "__main__":
 
     plot_dephasing_rates(
         dephasing_rates=dephasing_rates,
-        delta_k=result_params.delta_k_array[:, 0],
+        delta_k=isf_params.delta_k_array[:, 0],
         ax=ax2,
     )
 
