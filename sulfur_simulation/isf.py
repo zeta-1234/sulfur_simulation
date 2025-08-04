@@ -96,4 +96,3 @@ def plot_dephasing_rates(
     ax.grid(visible=True)
 
     return fig, ax
-  
