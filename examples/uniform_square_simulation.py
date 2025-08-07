@@ -8,8 +8,8 @@ import numpy as np
 from sulfur_simulation.hopping_calculator import SquareHoppingCalculator
 from sulfur_simulation.isf import (
     ISFParameters,
+    get_amplitudes,
     get_dephasing_rates,
-    get_isf,
     plot_dephasing_rates,
     plot_isf,
 )
@@ -44,7 +44,7 @@ if __name__ == "__main__":
         )
     )
 
-    isf_per_atom = get_isf(params=isf_params, positions=positions)
+    isf_per_atom = get_amplitudes(params=isf_params, positions=positions)
     average_isf = np.mean(isf_per_atom, axis=1).T
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))

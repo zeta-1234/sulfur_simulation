@@ -106,7 +106,7 @@ def plot_dephasing_rates(
     return fig, ax
 
 
-def get_isf(
+def get_amplitudes(
     params: ISFParameters,
     positions: np.ndarray[tuple[int, int], np.dtype[np.bool_]],
 ) -> np.ndarray[tuple[int, int], np.dtype[np.complex128]]:

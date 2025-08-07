@@ -6,14 +6,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from sulfur_simulation.hopping_calculator import (
-    SquareHoppingCalculatorWithWell,
+    LineDefectHoppingCalculator,
 )
 from sulfur_simulation.isf import (
     ISFParameters,
-    get_amplitude,
+    get_amplitudes,
     get_dephasing_rates,
-    plot_autocorrelation,
     plot_dephasing_rates,
+    plot_isf,
 )
 from sulfur_simulation.scattering_calculation import (
     SimulationParameters,
@@ -25,25 +25,20 @@ from sulfur_simulation.show_simulation import (
 )
 
 if __name__ == "__main__":
-    # Create a simulation with 3000 timesteps
-
     params = SimulationParameters(
         n_timesteps=3000,
-        lattice_dimension=100,
-        lattice_type="square",
+        lattice_dimension=(100, 100),
         n_particles=500,
         rng_seed=2,
-        temp=200,
+        hopping_calculator=LineDefectHoppingCalculator(baserate=0.01, temperature=200),
     )
-
-    hop_params = SquareHoppingCalculatorWithWell(baserate=0.01, params=params)
 
     isf_params = ISFParameters(
         n_delta_k_intervals=250,
         delta_k_max=2.5,
     )
 
-    positions = run_simulation(params=params, hop_params=hop_params)
+    positions = run_simulation(params=params)
 
     print(
         get_timeframe_str(
@@ -51,18 +46,13 @@ if __name__ == "__main__":
         )
     )
 
-    amplitudes = get_amplitude(
-        form_factor=isf_params.form_factor,
-        delta_k=isf_params.delta_k_array,
-        positions=positions,
-        lattice_dimension=params.lattice_dimension,
-    )
+    amplitudes = get_amplitudes(params=isf_params, positions=positions)
 
     average_amplitudes = np.mean(amplitudes, axis=1).T
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
 
-    plot_autocorrelation(x=average_amplitudes[18], t=params.times, ax=ax1)
+    plot_isf(x=average_amplitudes[18], t=params.times, ax=ax1)
 
     dephasing_rates = get_dephasing_rates(amplitudes=average_amplitudes, t=params.times)
 
