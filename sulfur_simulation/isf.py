@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 from scipy.optimize import curve_fit  # type: ignore library types
+from tqdm import trange
 
 from sulfur_simulation.util import get_figure
 
@@ -34,7 +35,7 @@ def _gaussian_decay_function(
     x: np.ndarray[Any, np.dtype[np.float64]], a: float, b: float, c: float
 ) -> np.ndarray[Any, np.dtype[np.float64]]:
     """Return a generic exponential function."""
-    return a * np.exp(b * x) + c
+    return a * np.exp(b * x) + c - 1000 * min(c, 0)
 
 
 def plot_isf(
@@ -117,7 +118,7 @@ def get_amplitudes(
         dtype=np.complex128,
     )
 
-    for time in range(amplitudes.shape[0]):
+    for time in trange(amplitudes.shape[0]):
         coords = np.nonzero(positions[time])
 
         # phase = r · Δk
