@@ -53,7 +53,7 @@ def animate_particle_positions(
     )
 
 
-def print_timeframe(
+def get_timeframe_str(
     positions: np.ndarray[tuple[int, int], np.dtype[np.bool_]],
     timestep: int,
     params: SimulationParameters,

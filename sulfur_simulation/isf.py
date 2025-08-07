@@ -60,10 +60,16 @@ def plot_isf(
 def _fit_gaussian_decay(
     t: np.ndarray, autocorrelation: np.ndarray, slope_threshold: float = 1e-3
 ) -> NDArray[np.float64]:
+    shortest_valid_length = 10
     derivative = np.gradient(autocorrelation, t)
     flat_indices = np.where(np.abs(derivative) < slope_threshold)[0]
-    cutoff_index = len(t) if len(flat_indices) == 0 else flat_indices[0]
-
+    cutoff_index = (
+        len(t)
+        if len(flat_indices) == 0
+        else valid_cutoffs[0]
+        if len(valid_cutoffs := flat_indices[flat_indices >= shortest_valid_length]) > 0
+        else flat_indices[0]
+    )
     optimal_params, _ = curve_fit(  # type: ignore types defined by curve_fit
         _gaussian_decay_function,
         t[:cutoff_index],
