@@ -18,8 +18,14 @@
         "ylabel",
         "pyproject",
         "scipy",
+        "neighbour",
+        "maxfev",
+        "blit",
+        "xlim",
+        "ylim",
+        "tqdm",
         "trange",
-        "tqdm"
+        "timesteps",
     ],
     "flagWords": [
         "hte",
