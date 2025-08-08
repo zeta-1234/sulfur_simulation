@@ -119,9 +119,10 @@ def _update_positions(
 
 def run_simulation(
     params: SimulationParameters,
+    rng_seed: int,
 ) -> np.ndarray:
     """Run the simulation."""
-    rng = np.random.default_rng(seed=params.rng_seed)
+    rng = np.random.default_rng(seed=rng_seed)
     all_positions = np.empty(
         (params.n_timesteps, *params.lattice_dimension), dtype=np.bool_
     )

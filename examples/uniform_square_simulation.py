@@ -36,7 +36,7 @@ if __name__ == "__main__":
         delta_k_max=2.5,
     )
 
-    positions = run_simulation(params=params)
+    positions = run_simulation(params=params, rng_seed=params.rng_seed)
 
     print(
         get_timeframe_str(
@@ -57,8 +57,6 @@ if __name__ == "__main__":
         delta_k=isf_params.delta_k_array[:, 0],
         ax=ax2,
     )
-
-    plt.show()
 
     timesteps = np.arange(1, 3001)[::10]
 

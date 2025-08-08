@@ -48,7 +48,7 @@ def _get_autocorrelation(x: np.ndarray) -> np.ndarray:
     result = np.correlate(x, np.conj(x), mode="full")
     autocorrelation = result[result.size // 2 :]
     autocorrelation /= autocorrelation[0]
-    return np.abs(autocorrelation)
+    return autocorrelation.real
 
 
 def _gaussian_decay_function(
@@ -68,13 +68,12 @@ def plot_isf(
     """Plot autocorrelation data with an exponential curve fit on a given axis."""
     fig, ax = get_figure(ax=ax)
     autocorrelation = _get_autocorrelation(x[delta_k_index])
-
     optimal_params = _fit_gaussian_decay(t=t, autocorrelation=autocorrelation)
 
-    ax.plot(t, autocorrelation, label="data")
+    ax.plot(t, autocorrelation, label="data_real")
     ax.plot(t, _gaussian_decay_function(t, *optimal_params), "r-", label="Fitted Curve")
     ax.legend()
-    ax.set_title(f"Autocorrelation of A for delta_k index {delta_k_index}")
+    ax.set_title(f"ISF of A for delta_k index {delta_k_index}")
     ax.set_xlabel("Lag")
     ax.set_ylabel("Autocorrelation")
     ax.grid(visible=True)
@@ -90,7 +89,7 @@ def _fit_gaussian_decay(
     flat_indices = np.where(np.abs(derivative) < slope_threshold)[0]
     cutoff_index = (
         len(t)
-        if len(flat_indices) == 0
+        if len(flat_indices) < 0
         else valid_cutoffs[0]
         if len(valid_cutoffs := flat_indices[flat_indices >= shortest_valid_length]) > 0
         else flat_indices[0]
@@ -113,7 +112,7 @@ def get_dephasing_rates(amplitudes: np.ndarray, t: np.ndarray) -> np.ndarray:
     for i in trange(len(amplitudes)):
         autocorrelation = _get_autocorrelation(amplitudes[i])
         optimal_params = _fit_gaussian_decay(t=t, autocorrelation=autocorrelation)
-        dephasing_rates[i] = optimal_params[0] * -1
+        dephasing_rates[i] = optimal_params[1] * -1
     return dephasing_rates
 
 

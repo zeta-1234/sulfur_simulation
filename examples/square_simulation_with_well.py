@@ -37,7 +37,7 @@ if __name__ == "__main__":
         delta_k_max=2.5,
     )
 
-    positions = run_simulation(params=params)
+    positions = run_simulation(params=params, rng_seed=params.rng_seed)
 
     amplitudes = get_amplitudes(params=isf_params, positions=positions)
 
@@ -53,9 +53,7 @@ if __name__ == "__main__":
         ax=ax2,
     )
 
-    plt.show()
-
-    timesteps = np.arange(1, 6001)[::20]
+    timesteps = np.arange(1, 6001)[::50]
 
     anim = animate_particle_positions(
         all_positions=positions,
