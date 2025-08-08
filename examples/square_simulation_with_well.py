@@ -21,12 +21,11 @@ from sulfur_simulation.scattering_calculation import (
 )
 from sulfur_simulation.show_simulation import (
     animate_particle_positions,
-    get_timeframe_str,
 )
 
 if __name__ == "__main__":
     params = SimulationParameters(
-        n_timesteps=3000,
+        n_timesteps=6000,
         lattice_dimension=(100, 100),
         n_particles=500,
         rng_seed=2,
@@ -40,21 +39,13 @@ if __name__ == "__main__":
 
     positions = run_simulation(params=params)
 
-    print(
-        get_timeframe_str(
-            positions=positions, timestep=params.n_timesteps - 1, params=params
-        )
-    )
-
     amplitudes = get_amplitudes(params=isf_params, positions=positions)
-
-    average_amplitudes = np.mean(amplitudes, axis=1).T
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
 
-    plot_isf(x=average_amplitudes[18], t=params.times, ax=ax1)
+    plot_isf(x=amplitudes, t=params.times, ax=ax1, delta_k_index=50)
 
-    dephasing_rates = get_dephasing_rates(amplitudes=average_amplitudes, t=params.times)
+    dephasing_rates = get_dephasing_rates(amplitudes=amplitudes, t=params.times)
 
     plot_dephasing_rates(
         dephasing_rates=dephasing_rates,
@@ -64,7 +55,7 @@ if __name__ == "__main__":
 
     plt.show()
 
-    timesteps = np.arange(1, 3001)[::10]
+    timesteps = np.arange(1, 6001)[::20]
 
     anim = animate_particle_positions(
         all_positions=positions,

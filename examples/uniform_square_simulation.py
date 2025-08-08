@@ -44,14 +44,13 @@ if __name__ == "__main__":
         )
     )
 
-    isf_per_atom = get_amplitudes(params=isf_params, positions=positions)
-    average_isf = np.mean(isf_per_atom, axis=1).T
+    amplitudes = get_amplitudes(params=isf_params, positions=positions)
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
 
-    plot_isf(x=average_isf[125], t=params.times, ax=ax1)
+    plot_isf(x=amplitudes, t=params.times, ax=ax1, delta_k_index=50)
 
-    dephasing_rates = get_dephasing_rates(amplitudes=average_isf, t=params.times)
+    dephasing_rates = get_dephasing_rates(amplitudes=amplitudes, t=params.times)
 
     plot_dephasing_rates(
         dephasing_rates=dephasing_rates,
