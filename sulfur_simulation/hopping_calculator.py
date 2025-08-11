@@ -1,15 +1,10 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, override
+from typing import ClassVar, override
 
 import numpy as np
 from scipy.constants import Boltzmann  # type: ignore[reportMissingTypeStubs]
-
-if TYPE_CHECKING:
-    from sulfur_simulation.scattering_calculation import (
-        SimulationParameters,  # type: ignore library types
-    )
 
 
 class HoppingCalculator(ABC):
@@ -89,41 +84,35 @@ class LineDefectHoppingCalculator(SquareHoppingCalculator):
 
 
 class LennardJonesHoppingCalculator(SquareHoppingCalculator):
-    """Hopping Calculator with a Leonard-Jones potential in a square lattice."""
+    """Hopping Calculator with a Lennard Jones potential between particles."""
 
-    def __init__(
-        self,
+    lj_table: ClassVar[dict[tuple[int, int], float]] = {}
+
+    @classmethod
+    def initialize_lj_table(
+        cls,
         sigma: float,
         epsilon: float,
         cutoff: int,
-        params: SimulationParameters,
-        *args: tuple[Any, ...],
-        **kwargs: tuple[Any, ...],
+        lattice_spacing: float,
     ) -> None:
-        super().__init__(*args, **kwargs)  # type: ignore RuffANN002
-
-        self.sigma = sigma
-        self.epsilon = epsilon
-        self.cutoff = cutoff
-        self.params = params
-
-        self.lj_table = self.lj_lookup_table()
-
-    def lj_lookup_table(self) -> dict[tuple[int, int], float]:
-        """Generate a lookup table of Lennard-Jones potential values."""
-        lookup: dict[tuple[int, int], float] = {}
-
-        for dx in range(-self.cutoff, self.cutoff + 1):
-            for dy in range(-self.cutoff, self.cutoff + 1):
+        """Create lookup table for Lennard Jones values."""
+        lookup = {}
+        for dx in range(-cutoff, cutoff + 1):
+            for dy in range(-cutoff, cutoff + 1):
                 if dx == 0 and dy == 0:
                     continue
-
-                r = self.params.lattice_spacing * np.sqrt(dx**2 + dy**2)
-
-                if r <= self.cutoff * self.params.lattice_spacing:
-                    sr6 = (self.sigma / r) ** 6
+                r = lattice_spacing * np.sqrt(dx**2 + dy**2)
+                if r <= cutoff * lattice_spacing:
+                    sr6 = (sigma / r) ** 6
                     sr12 = sr6**2
-                    potential = 4 * self.epsilon * (sr12 - sr6)
-                    lookup[dx, dy] = potential
+                    lookup[dx, dy] = 4 * epsilon * (sr12 - sr6)
+        cls.lj_table = lookup
 
-        return lookup
+    @classmethod
+    @override
+    def _get_energy_landscape(
+        cls, positions: np.ndarray[tuple[int, int], np.dtype[np.bool_]]
+    ) -> np.ndarray[tuple[int, int], np.dtype[np.float64]]:
+        """Generate the energy landscape for the lattice."""
+        return super()._get_energy_landscape(positions)
