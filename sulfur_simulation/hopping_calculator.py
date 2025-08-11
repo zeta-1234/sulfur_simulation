@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import override
+from typing import TYPE_CHECKING, Any, override
 
 import numpy as np
-from scipy.constants import Boltzmann  # type: ignore library types
+from scipy.constants import Boltzmann  # type: ignore[reportMissingTypeStubs]
+
+if TYPE_CHECKING:
+    from sulfur_simulation.scattering_calculation import (
+        SimulationParameters,  # type: ignore library types
+    )
 
 
 class HoppingCalculator(ABC):
@@ -81,3 +86,44 @@ class LineDefectHoppingCalculator(SquareHoppingCalculator):
         energies = super()._get_energy_landscape(positions=positions)
         energies[positions.shape[0] // 2, :] = 0
         return energies
+
+
+class LennardJonesHoppingCalculator(SquareHoppingCalculator):
+    """Hopping Calculator with a Leonard-Jones potential in a square lattice."""
+
+    def __init__(
+        self,
+        sigma: float,
+        epsilon: float,
+        cutoff: int,
+        params: SimulationParameters,
+        *args: tuple[Any, ...],
+        **kwargs: tuple[Any, ...],
+    ) -> None:
+        super().__init__(*args, **kwargs)  # type: ignore RuffANN002
+
+        self.sigma = sigma
+        self.epsilon = epsilon
+        self.cutoff = cutoff
+        self.params = params
+
+        self.lj_table = self.lj_lookup_table()
+
+    def lj_lookup_table(self) -> dict[tuple[int, int], float]:
+        """Generate a lookup table of Lennard-Jones potential values."""
+        lookup: dict[tuple[int, int], float] = {}
+
+        for dx in range(-self.cutoff, self.cutoff + 1):
+            for dy in range(-self.cutoff, self.cutoff + 1):
+                if dx == 0 and dy == 0:
+                    continue
+
+                r = self.params.lattice_spacing * np.sqrt(dx**2 + dy**2)
+
+                if r <= self.cutoff * self.params.lattice_spacing:
+                    sr6 = (self.sigma / r) ** 6
+                    sr12 = sr6**2
+                    potential = 4 * self.epsilon * (sr12 - sr6)
+                    lookup[dx, dy] = potential
+
+        return lookup

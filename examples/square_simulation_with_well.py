@@ -25,7 +25,7 @@ from sulfur_simulation.show_simulation import (
 
 if __name__ == "__main__":
     params = SimulationParameters(
-        n_timesteps=6000,
+        n_timesteps=12000,
         lattice_dimension=(100, 100),
         n_particles=500,
         rng_seed=2,
@@ -33,17 +33,21 @@ if __name__ == "__main__":
     )
 
     isf_params = ISFParameters(
-        n_delta_k_intervals=250,
         delta_k_max=2.5,
+        params=params,
     )
 
     positions = run_simulation(params=params, rng_seed=params.rng_seed)
 
-    amplitudes = get_amplitudes(params=isf_params, positions=positions)
+    amplitudes = get_amplitudes(
+        isf_params=isf_params, positions=positions, params=params
+    )
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
 
-    plot_isf(x=amplitudes, t=params.times, ax=ax1, delta_k_index=50)
+    plot_isf(
+        x=amplitudes, t=params.times, ax=ax1, delta_k_index=36, isf_params=isf_params
+    )
 
     dephasing_rates = get_dephasing_rates(amplitudes=amplitudes, t=params.times)
 
@@ -53,7 +57,7 @@ if __name__ == "__main__":
         ax=ax2,
     )
 
-    timesteps = np.arange(1, 6001)[::50]
+    timesteps = np.arange(1, 12001)[::100]
 
     anim = animate_particle_positions(
         all_positions=positions,

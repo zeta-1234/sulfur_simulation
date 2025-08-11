@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
+import scipy.fft  # type: ignore[reportMissingTypeStubs]
 from scipy.optimize import curve_fit  # type: ignore library types
 from tqdm import trange
 
@@ -14,41 +15,52 @@ if TYPE_CHECKING:
     from matplotlib.figure import Figure, SubFigure
     from numpy.typing import NDArray
 
+    from sulfur_simulation.scattering_calculation import SimulationParameters
+
 
 @dataclass(kw_only=True, frozen=True)
 class ISFParameters:
     """Parameters for plotting results of simulation."""
 
-    n_delta_k_intervals: int
-    """The number of delta_k values to use"""
     delta_k_max: float
     """The max value of delta_k"""
-    delta_k_min: float = 0.1
-    """The min value of delta_k"""
+    params: SimulationParameters
+    """Simulation parameters."""
     form_factor: float = 1
     """Prefactor for scattered amplitude"""
-
-    def __post_init__(self) -> None:
-        if self.delta_k_min == 0:
-            msg = "delta_k_min should not be zero"
-            raise ValueError(msg)
 
     @property
     def delta_k_array(self) -> np.ndarray:
         """All delta_k values."""
-        return _get_delta_k(
-            n_points=self.n_delta_k_intervals,
-            delta_k_range=(self.delta_k_min, self.delta_k_max),
-        )
+        return _get_delta_k(delta_k_max=self.delta_k_max, params=self.params)
 
 
-def _get_autocorrelation(x: np.ndarray) -> np.ndarray:
-    """Compute the autocorrelation of a complex-valued 1D signal x."""
-    x -= np.mean(x)
-    result = np.correlate(x, np.conj(x), mode="full")
-    autocorrelation = result[result.size // 2 :]
-    autocorrelation /= autocorrelation[0]
-    return autocorrelation.real
+def _get_delta_k(
+    delta_k_max: float,
+    params: SimulationParameters,
+    direction: tuple[float, float] = (1, 0),
+) -> np.ndarray:
+    """Return a matrix of delta_k values in the [1,0] direction."""
+    delta_k_interval = (2 * np.pi) / (
+        params.lattice_dimension[0] * params.lattice_spacing
+    )
+    abs_delta_k = np.arange(
+        start=delta_k_interval, stop=delta_k_max, step=delta_k_interval
+    )
+
+    return np.asarray(direction)[np.newaxis, :] * abs_delta_k[:, np.newaxis]
+
+
+def _get_autocorrelation(amplitudes: np.ndarray) -> np.ndarray:
+    """Compute the autocorrelation of a complex-valued 1D signal."""
+    n = len(amplitudes)
+    padded_length = 2 * n - 1
+    padded = np.zeros(padded_length, dtype=amplitudes.dtype)
+    padded[:n] = amplitudes
+    transformed = np.asarray(scipy.fft.fft(padded))
+    power_spectrum = np.abs(transformed) ** 2
+    autocorr = np.asarray(scipy.fft.ifft(power_spectrum))
+    return (autocorr / n).real[:n]
 
 
 def _gaussian_decay_function(
@@ -60,6 +72,7 @@ def _gaussian_decay_function(
 
 def plot_isf(
     x: np.ndarray[tuple[int, int], np.dtype[np.complex128]],
+    isf_params: ISFParameters,
     delta_k_index: int,
     t: np.ndarray,
     *,
@@ -73,7 +86,7 @@ def plot_isf(
     ax.plot(t, autocorrelation, label="data_real")
     ax.plot(t, _gaussian_decay_function(t, *optimal_params), "r-", label="Fitted Curve")
     ax.legend()
-    ax.set_title(f"ISF of A for delta_k index {delta_k_index}")
+    ax.set_title(f"ISF of A for delta_k = {isf_params.delta_k_array[delta_k_index]}")
     ax.set_xlabel("Lag")
     ax.set_ylabel("Autocorrelation")
     ax.grid(visible=True)
@@ -89,7 +102,7 @@ def _fit_gaussian_decay(
     flat_indices = np.where(np.abs(derivative) < slope_threshold)[0]
     cutoff_index = (
         len(t)
-        if len(flat_indices) < 0
+        if len(flat_indices) == 0
         else valid_cutoffs[0]
         if len(valid_cutoffs := flat_indices[flat_indices >= shortest_valid_length]) > 0
         else flat_indices[0]
@@ -100,7 +113,7 @@ def _fit_gaussian_decay(
         autocorrelation[:cutoff_index],
         p0=(1, -0.005, 1),
         bounds=([0, -np.inf, -np.inf], [np.inf, 0, np.inf]),
-        maxfev=10000,
+        maxfev=100000,
     )
 
     return cast("NDArray[np.float64]", optimal_params)
@@ -131,12 +144,13 @@ def plot_dephasing_rates(
 
 
 def get_amplitudes(
-    params: ISFParameters,
+    isf_params: ISFParameters,
+    params: SimulationParameters,
     positions: np.ndarray[tuple[int, int, int], np.dtype[np.bool_]],
 ) -> np.ndarray[tuple[int, int], np.dtype[np.complex128]]:
     """Return summed complex amplitudes for each delta_k (rows) and timestep (columns)."""
     n_timesteps, dimension, _ = positions.shape
-    n_delta_k = params.delta_k_array.shape[0]
+    n_delta_k = isf_params.delta_k_array.shape[0]
 
     amplitudes = np.zeros((n_delta_k, n_timesteps), dtype=np.complex128)
 
@@ -146,24 +160,11 @@ def get_amplitudes(
     )
 
     for t in trange(n_timesteps):
-        coords = all_coords[positions[t].ravel()]
+        coords = all_coords[positions[t].ravel()] * params.lattice_spacing
 
-        phase = coords @ params.delta_k_array.T
+        phase = coords @ isf_params.delta_k_array.T
 
-        amp = params.form_factor * np.exp(-1j * phase)
+        amp = isf_params.form_factor * np.exp(-1j * phase)
         amplitudes[:, t] = np.sum(amp, axis=0)
 
     return amplitudes
-
-
-def _get_delta_k(
-    n_points: int,
-    delta_k_range: tuple[float, float],
-    direction: tuple[float, float] = (1, 0),
-) -> np.ndarray:
-    """Return a matrix of delta_k values in the [1,0] direction."""
-    abs_delta_k = np.linspace(
-        start=delta_k_range[0], stop=delta_k_range[1], num=n_points, endpoint=True
-    )
-
-    return np.asarray(direction)[np.newaxis, :] * abs_delta_k[:, np.newaxis]
