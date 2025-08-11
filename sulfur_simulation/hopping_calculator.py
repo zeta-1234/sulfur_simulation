@@ -115,4 +115,16 @@ class LennardJonesHoppingCalculator(SquareHoppingCalculator):
         cls, positions: np.ndarray[tuple[int, int], np.dtype[np.bool_]]
     ) -> np.ndarray[tuple[int, int], np.dtype[np.float64]]:
         """Generate the energy landscape for the lattice."""
-        return super()._get_energy_landscape(positions)
+        energies = super()._get_energy_landscape(positions)
+
+        n_rows, n_columns = positions.shape
+        occupied_coordinates = np.argwhere(positions)
+
+        # Add Lennard-Jones contributions from each occupied site
+        for particle_row, particle_col in occupied_coordinates:
+            for (delta_row, delta_col), lj_potential in cls.lj_table.items():
+                target_row = (particle_row + delta_row) % n_rows
+                target_col = (particle_col + delta_col) % n_columns
+                energies[target_row, target_col] += lj_potential
+
+        return energies
