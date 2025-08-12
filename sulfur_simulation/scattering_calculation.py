@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -19,8 +20,6 @@ class SimulationParameters:
     """Number of timesteps"""
     lattice_dimension: tuple[int, int]
     "Dimension of lattice"
-    lattice_spacing: float = 2.5
-    "Spacing of lattice in Angstroms"
     n_particles: int
     """The number of particles"""
     rng_seed: int
@@ -98,13 +97,16 @@ def _update_positions(
     rng: Generator,
 ) -> np.ndarray:
     true_locations = np.flatnonzero(particle_positions)
-
+    cum_prob_warning_threshold = 0.5
     # Go through the simulation one particle at a time
     # and make a jump based on jump_probabilities
     for particle_index, initial_location in enumerate(true_locations):
         cumulative_probabilities = np.cumsum(jump_probabilities[particle_index])
         rand_val = rng.random()
-
+        if cumulative_probabilities[-1] > cum_prob_warning_threshold:
+            warnings.warn(
+                f"Probabilities = {cumulative_probabilities[-1]}", stacklevel=2
+            )
         for i, threshold in enumerate(cumulative_probabilities):
             if rand_val < threshold:
                 particle_positions = _make_jump(

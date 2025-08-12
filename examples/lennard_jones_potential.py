@@ -24,24 +24,21 @@ from sulfur_simulation.show_simulation import (
 
 if __name__ == "__main__":
     params = SimulationParameters(
-        n_timesteps=12000,
+        n_timesteps=3000,
         lattice_dimension=(100, 100),
         n_particles=500,
         rng_seed=1,
         hopping_calculator=LennardJonesHoppingCalculator(
-            baserate=0.01, temperature=200
+            baserate=0.01,
+            temperature=200,
+            lattice_spacing=2.5,
+            sigma=2.55,
+            epsilon=0.02 * 1.6e-19,
         ),
     )
 
-    LennardJonesHoppingCalculator.initialize_lj_table(
-        sigma=3.55,
-        epsilon=0.02 * 1.6e-16,
-        cutoff=3,
-        lattice_spacing=params.lattice_spacing,
-    )
-
     isf_params = ISFParameters(
-        delta_k_max=2.5,
+        delta_k_max=2 * np.pi,
         params=params,
     )
 
@@ -53,9 +50,7 @@ if __name__ == "__main__":
         )
     )
 
-    amplitudes = get_amplitudes(
-        isf_params=isf_params, positions=positions, params=params
-    )
+    amplitudes = get_amplitudes(isf_params=isf_params, positions=positions)
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
 
@@ -71,13 +66,13 @@ if __name__ == "__main__":
         ax=ax2,
     )
 
-    timesteps = np.arange(1, 12001)[::100]
+    timesteps = np.arange(1, 3000)[::20]
 
     anim = animate_particle_positions(
         all_positions=positions,
         lattice_dimension=params.lattice_dimension,
         timesteps=timesteps,
-        lattice_spacing=params.lattice_spacing,
+        lattice_spacing=2.5,
     )
 
     plt.show()

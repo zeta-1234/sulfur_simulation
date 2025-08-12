@@ -41,9 +41,7 @@ def _get_delta_k(
     direction: tuple[float, float] = (1, 0),
 ) -> np.ndarray:
     """Return a matrix of delta_k values in the [1,0] direction."""
-    delta_k_interval = (2 * np.pi) / (
-        params.lattice_dimension[0] * params.lattice_spacing
-    )
+    delta_k_interval = (2 * np.pi) / (params.lattice_dimension[0])
     abs_delta_k = np.arange(
         start=delta_k_interval, stop=delta_k_max, step=delta_k_interval
     )
@@ -59,8 +57,8 @@ def _get_autocorrelation(amplitudes: np.ndarray) -> np.ndarray:
     padded[:n] = amplitudes
     transformed = np.asarray(scipy.fft.fft(padded))
     power_spectrum = np.abs(transformed) ** 2
-    autocorr = np.asarray(scipy.fft.ifft(power_spectrum))
-    return (autocorr / n).real[:n]
+    autocorrelation = np.asarray(scipy.fft.ifft(power_spectrum))
+    return (autocorrelation / (autocorrelation[0])).real[:n]
 
 
 def _gaussian_decay_function(
@@ -145,7 +143,6 @@ def plot_dephasing_rates(
 
 def get_amplitudes(
     isf_params: ISFParameters,
-    params: SimulationParameters,
     positions: np.ndarray[tuple[int, int, int], np.dtype[np.bool_]],
 ) -> np.ndarray[tuple[int, int], np.dtype[np.complex128]]:
     """Return summed complex amplitudes for each delta_k (rows) and timestep (columns)."""
@@ -160,7 +157,7 @@ def get_amplitudes(
     )
 
     for t in trange(n_timesteps):
-        coords = all_coords[positions[t].ravel()] * params.lattice_spacing
+        coords = all_coords[positions[t].ravel()]
 
         phase = coords @ isf_params.delta_k_array.T
 

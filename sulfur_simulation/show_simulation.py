@@ -27,7 +27,7 @@ def animate_particle_positions(
 
     # Initially no points
     particle_scatter: PathCollection = ax.scatter(
-        [], [], color="red", s=40, edgecolors="black"
+        [], [], color="red", s=20, edgecolors="black"
     )
     ax.legend(["Particles"], loc="upper right")
 
