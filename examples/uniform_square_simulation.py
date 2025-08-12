@@ -44,9 +44,7 @@ if __name__ == "__main__":
         )
     )
 
-    amplitudes = get_amplitudes(
-        isf_params=isf_params, positions=positions, params=params
-    )
+    amplitudes = get_amplitudes(isf_params=isf_params, positions=positions)
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
 
@@ -68,7 +66,7 @@ if __name__ == "__main__":
         all_positions=positions,
         lattice_dimension=params.lattice_dimension,
         timesteps=timesteps,
-        lattice_spacing=params.lattice_spacing,
+        lattice_spacing=2.5,
     )
 
     plt.show()
