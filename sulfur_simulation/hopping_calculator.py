@@ -116,15 +116,13 @@ class LennardJonesHoppingCalculator(SquareHoppingCalculator):
             sr12 = sr6**2
             return 4 * epsilon * (sr12 - sr6)
 
-        # Since V(r) → 0 as r → ∞, find r_cut where |V(r_cut)| = cutoff_energy
-        # Search in a reasonable interval (sigma, 10*sigma)
-        # Make sure to handle potential exceptions if no root found
-
-        def func(r: float) -> float:
+        def energy_difference(r: float) -> float:
             return abs(lj_potential(r)) - cutoff_energy
 
         try:
-            r_cut = cast("float", brentq(func, sigma * 1.01, 5 * lattice_spacing))
+            r_cut = cast(
+                "float", brentq(energy_difference, sigma * 1.01, 5 * lattice_spacing)
+            )
         except ValueError:
             r_cut = 5 * lattice_spacing
 
