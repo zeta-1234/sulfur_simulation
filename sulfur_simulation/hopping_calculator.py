@@ -95,18 +95,32 @@ class LennardJonesHoppingCalculator(SquareHoppingCalculator):
         sigma: float,
         epsilon: float,
         cutoff_energy: float = 1.6e-22,
+        max_single_prob: float = 0.2,  # determined relative to the background energy
     ) -> None:
         super().__init__(baserate, temperature)
+        self.max_single_prob = max_single_prob
+        self.max_lj_value = self._get_max_lj_value(epsilon=epsilon)
         self.lj_table = self._get_lj_table(
             sigma=sigma,
             epsilon=epsilon,
             lattice_spacing=lattice_spacing,
             cutoff_energy=cutoff_energy,
+            max_potential=self.max_lj_value,
+        )
+
+    def _get_max_lj_value(self, epsilon: float) -> float:
+        return epsilon + 2 * Boltzmann * self._temperature * np.log(
+            self.max_single_prob / self._baserate
         )
 
     @classmethod
     def _get_lj_table(
-        cls, sigma: float, epsilon: float, lattice_spacing: float, cutoff_energy: float
+        cls,
+        sigma: float,
+        epsilon: float,
+        lattice_spacing: float,
+        cutoff_energy: float,
+        max_potential: float,
     ) -> dict[tuple[int, int], float]:
         """Create lookup table for Lennard Jones values."""
         max_cutoff = 5
@@ -136,7 +150,9 @@ class LennardJonesHoppingCalculator(SquareHoppingCalculator):
                 if r <= cutoff * lattice_spacing:
                     sr6 = (sigma / r) ** 6
                     sr12 = sr6**2
-                    lookup[dx, dy] = 4 * epsilon * (sr12 - sr6)
+                    lookup[dx, dy] = np.clip(
+                        4 * epsilon * (sr12 - sr6), a_min=None, a_max=max_potential
+                    )
 
         return lookup
 

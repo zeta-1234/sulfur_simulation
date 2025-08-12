@@ -97,7 +97,7 @@ def _update_positions(
     rng: Generator,
 ) -> np.ndarray:
     true_locations = np.flatnonzero(particle_positions)
-    cum_prob_warning_threshold = 0.5
+    cum_prob_warning_threshold = 1
     # Go through the simulation one particle at a time
     # and make a jump based on jump_probabilities
     for particle_index, initial_location in enumerate(true_locations):
@@ -105,8 +105,12 @@ def _update_positions(
         rand_val = rng.random()
         if cumulative_probabilities[-1] > cum_prob_warning_threshold:
             warnings.warn(
-                f"Probabilities = {cumulative_probabilities[-1]}", stacklevel=2
+                f"Cumulative probability = {cumulative_probabilities[-1]}, rescaling to 1",
+                stacklevel=2,
             )
+        if cumulative_probabilities[-1] > 1:
+            cumulative_probabilities /= cumulative_probabilities[-1]
+
         for i, threshold in enumerate(cumulative_probabilities):
             if rand_val < threshold:
                 particle_positions = _make_jump(

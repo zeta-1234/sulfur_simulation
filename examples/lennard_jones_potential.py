@@ -24,7 +24,7 @@ from sulfur_simulation.show_simulation import (
 
 if __name__ == "__main__":
     params = SimulationParameters(
-        n_timesteps=3000,
+        n_timesteps=12000,
         lattice_dimension=(100, 100),
         n_particles=500,
         rng_seed=1,
@@ -32,8 +32,8 @@ if __name__ == "__main__":
             baserate=0.01,
             temperature=200,
             lattice_spacing=2.5,
-            sigma=2.55,
-            epsilon=0.02 * 1.6e-19,
+            sigma=2.55,  # distance where LJ potential = 0
+            epsilon=0.03 * 1.6e-19,  # minimum potential at centre
         ),
     )
 
@@ -65,7 +65,7 @@ if __name__ == "__main__":
         ax=ax2,
     )
 
-    timesteps = np.arange(1, 3000)[::20]
+    timesteps = np.arange(1, 12000)[::20]
 
     anim = animate_particle_positions(
         all_positions=positions,
