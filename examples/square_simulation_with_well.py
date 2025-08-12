@@ -32,12 +32,9 @@ if __name__ == "__main__":
         hopping_calculator=LineDefectHoppingCalculator(baserate=0.01, temperature=200),
     )
 
-    isf_params = ISFParameters(
-        params=params,
-    )
+    positions = run_simulation(params=params)
 
-    positions = run_simulation(params=params, rng_seed=params.rng_seed)
-
+    isf_params = ISFParameters(params=params)
     amplitudes = get_amplitudes(isf_params=isf_params, positions=positions)
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
