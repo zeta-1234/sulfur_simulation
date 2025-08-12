@@ -33,7 +33,6 @@ if __name__ == "__main__":
     )
 
     isf_params = ISFParameters(
-        delta_k_max=2.5,
         params=params,
     )
 

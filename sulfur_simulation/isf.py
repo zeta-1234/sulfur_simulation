@@ -18,11 +18,25 @@ if TYPE_CHECKING:
     from sulfur_simulation.scattering_calculation import SimulationParameters
 
 
+def _get_delta_k(
+    params: SimulationParameters,
+    delta_k_max: float,
+    direction: tuple[float, float] = (1, 0),
+) -> np.ndarray:
+    """Return a matrix of delta_k values in the [1,0] direction."""
+    delta_k_interval = (2 * np.pi) / (params.lattice_dimension[0])
+    abs_delta_k = np.arange(
+        start=delta_k_interval, stop=delta_k_max, step=delta_k_interval
+    )
+
+    return np.asarray(direction)[np.newaxis, :] * abs_delta_k[:, np.newaxis]
+
+
 @dataclass(kw_only=True, frozen=True)
 class ISFParameters:
     """Parameters for plotting results of simulation."""
 
-    delta_k_max: float
+    delta_k_max: float = 2 * np.pi
     """The max value of delta_k"""
     params: SimulationParameters
     """Simulation parameters."""
@@ -33,20 +47,6 @@ class ISFParameters:
     def delta_k_array(self) -> np.ndarray:
         """All delta_k values."""
         return _get_delta_k(delta_k_max=self.delta_k_max, params=self.params)
-
-
-def _get_delta_k(
-    delta_k_max: float,
-    params: SimulationParameters,
-    direction: tuple[float, float] = (1, 0),
-) -> np.ndarray:
-    """Return a matrix of delta_k values in the [1,0] direction."""
-    delta_k_interval = (2 * np.pi) / (params.lattice_dimension[0])
-    abs_delta_k = np.arange(
-        start=delta_k_interval, stop=delta_k_max, step=delta_k_interval
-    )
-
-    return np.asarray(direction)[np.newaxis, :] * abs_delta_k[:, np.newaxis]
 
 
 def _get_autocorrelation(amplitudes: np.ndarray) -> np.ndarray:
