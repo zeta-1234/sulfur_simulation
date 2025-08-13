@@ -3,11 +3,17 @@ from __future__ import annotations
 import warnings
 from abc import ABC, abstractmethod
 from functools import cached_property
-from typing import Callable, cast, override
+from typing import TYPE_CHECKING, cast, override
 
 import numpy as np
 from scipy.constants import Boltzmann  # type: ignore[reportMissingTypeStubs]
-from scipy.optimize import root_scalar, RootResults  # type: ignore[reportMissingTypeStubs]
+from scipy.optimize import (  # type: ignore[reportMissingTypeStubs]
+    RootResults,
+    root_scalar,  # type: ignore[reportMissingTypeStubs]
+)
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 class HoppingCalculator(ABC):
@@ -95,7 +101,7 @@ class LineDefectHoppingCalculator(SquareHoppingCalculator):
         return energies
 
 
-class InteractingParticlesHoppingCalculator(SquareHoppingCalculator):
+class InteractingHoppingCalculator(SquareHoppingCalculator):
     """Hopping Calculator with a Lennard Jones potential between particles."""
 
     def __init__(
@@ -104,14 +110,14 @@ class InteractingParticlesHoppingCalculator(SquareHoppingCalculator):
         temperature: float,
         lattice_spacing: float,
         interaction: Callable[[float], float],
-        cutoff_radius_potential: float = 1.6e-22, 
+        cutoff_radius_potential: float = 1.6e-22,
     ) -> None:
         super().__init__(baserate, temperature)
 
         self._lattice_spacing = lattice_spacing
         self._interaction = interaction
         self._cutoff_radius_potential = cutoff_radius_potential
-    
+
     @cached_property
     def _potential_table(
         self
@@ -120,51 +126,12 @@ class InteractingParticlesHoppingCalculator(SquareHoppingCalculator):
         max_cutoff_radius = 6
 
         def _energy_difference(r: float) -> float:
-            return abs(self._interaction(r)) - self._cutoff_radius_potential
+            # subtract potential at infinity
+            return abs(self._interaction(r) - self._interaction(1000 * self._lattice_spacing)) - self._cutoff_radius_potential
 
-        
-        def _find_cutoff_radius(
-            energy_difference: Callable[[float], float],
-            r_max: float,
-            r_min: float,
-            num_points: int = 1000
-        ) -> float:
-            """
-            Find the largest root of `energy_difference(r)` by scanning inward from r_max.
-            
-            Raises
-            ------
-            ValueError
-                If no root is found in the given range.
-            """
-            r_values = np.linspace(r_max, r_min, num_points)
-            energy_values = [energy_difference(r) for r in r_values]
-
-            # Scan inward for the first sign change
-            for i in range(len(r_values) - 1):
-                f_current = energy_values[i]
-                f_next = energy_values[i + 1]
-
-                if f_current * f_next < 0:
-                    bracket_a = r_values[i + 1]
-                    bracket_b = r_values[i]
-
-                    # Find root in bracket using Brent's method
-                    solution = cast("RootResults", root_scalar(
-                        energy_difference,
-                        bracket=[bracket_a, bracket_b],
-                        method='brentq'
-                    ))
-
-                    if solution.converged:
-                        return solution.root
-
-            raise ValueError("No root found in the given range.")
-        
-        cutoff_radius = _find_cutoff_radius(energy_difference=_energy_difference, 
-                                            r_max = max_cutoff_radius * self._lattice_spacing, 
-                                            r_min = self._lattice_spacing)
-
+        cutoff_radius = _find_cutoff_radius(energy_difference=_energy_difference,
+                                            r_max=max_cutoff_radius * self._lattice_spacing,
+                                            r_min=self._lattice_spacing)
 
         cutoff_radius = int(np.ceil(cutoff_radius / self._lattice_spacing))
 
@@ -199,23 +166,64 @@ class InteractingParticlesHoppingCalculator(SquareHoppingCalculator):
         return energies
 
 
-def get_lennard_jones_potential(sigma: float, 
-                                epsilon: float,   
+def get_lennard_jones_potential(sigma: float,
+                                epsilon: float,
                                 cutoff_energy: float = 1.9e-20,
                                 ) -> Callable[[float], float]:
     """
     Take float and return Lennard Jones potential.
-    
+
     ...math:::
         V(r) = 4 * epsilon * ((sigma / r) ** 12 - (sigma / r) ** 6)
-        
+
     Sigma = radius where potential = 0
     Epsilon = minimum potential reached
     """
-    
+
     def _potential(r: float) -> float:
         sr6 = (sigma / r) ** 6
         sr12 = sr6 ** 2
         return np.clip(4 * epsilon * (sr12 - sr6), a_min=None, a_max=cutoff_energy)
 
     return _potential
+
+
+def _find_cutoff_radius(
+    energy_difference: Callable[[float], float],
+    r_max: float,
+    r_min: float,
+    num_points: int = 1000
+) -> float:
+    """
+    Find the largest root of `energy_difference(r)` by scanning inward from r_max.
+
+    Raises
+    ------
+    ValueError
+        If no root is found in the given range.
+    """
+    r_values = np.linspace(r_max, r_min, num_points)
+    energy_values = [energy_difference(r) for r in r_values]
+
+    # Scan inward for the first sign change
+    for i in range(len(r_values) - 1):
+        f_current = energy_values[i]
+        f_next = energy_values[i + 1]
+
+        if f_current * f_next < 0:
+            bracket_a = r_values[i + 1]
+            bracket_b = r_values[i]
+
+            # Find root in bracket using Brent's method
+            solution = cast("RootResults", root_scalar(
+                energy_difference,
+                bracket=[bracket_a, bracket_b],
+                method="brentq"
+            ))
+
+            if solution.converged:
+                return solution.root
+    if energy_values[0] < 0:
+        return 0
+    msg = "No root found in the given range."
+    raise ValueError(msg)
