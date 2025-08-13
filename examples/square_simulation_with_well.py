@@ -1,13 +1,17 @@
+"""Example simulation for a square lattice with a potential energy well across the center."""
+
 from __future__ import annotations
 
 import matplotlib.pyplot as plt
 import numpy as np
 
-from sulfur_simulation.hopping_calculator import SquareHoppingCalculator
+from sulfur_simulation.hopping_calculator import (
+    LineDefectHoppingCalculator,
+)
 from sulfur_simulation.isf import (
     ISFParameters,
+    get_amplitudes,
     get_dephasing_rates,
-    get_isf,
     plot_dephasing_rates,
     plot_isf,
 )
@@ -17,39 +21,29 @@ from sulfur_simulation.scattering_calculation import (
 )
 from sulfur_simulation.show_simulation import (
     animate_particle_positions,
-    print_timeframe,
 )
 
 if __name__ == "__main__":
     params = SimulationParameters(
-        n_timesteps=3000,
+        n_timesteps=12000,
         lattice_dimension=(100, 100),
         n_particles=500,
-        rng_seed=1,
-        hopping_calculator=SquareHoppingCalculator(baserate=0.01, temperature=200),
-    )
-
-    isf_params = ISFParameters(
-        n_delta_k_intervals=250,
-        delta_k_max=2.5,
+        rng_seed=2,
+        hopping_calculator=LineDefectHoppingCalculator(baserate=0.01, temperature=200),
     )
 
     positions = run_simulation(params=params)
 
-    print(
-        print_timeframe(
-            positions=positions, timestep=params.n_timesteps - 1, params=params
-        )
-    )
-
-    isf_per_atom = get_isf(params=isf_params, positions=positions)
-    average_isf = np.mean(isf_per_atom, axis=1).T
+    isf_params = ISFParameters(params=params)
+    amplitudes = get_amplitudes(isf_params=isf_params, positions=positions)
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
 
-    plot_isf(x=average_isf[125], t=params.times, ax=ax1)
+    plot_isf(
+        x=amplitudes, t=params.times, ax=ax1, delta_k_index=36, isf_params=isf_params
+    )
 
-    dephasing_rates = get_dephasing_rates(amplitudes=average_isf, t=params.times)
+    dephasing_rates = get_dephasing_rates(amplitudes=amplitudes, t=params.times)
 
     plot_dephasing_rates(
         dephasing_rates=dephasing_rates,
@@ -57,15 +51,13 @@ if __name__ == "__main__":
         ax=ax2,
     )
 
-    plt.show()
-
-    timesteps = np.arange(1, 3001)[::10]
+    timesteps = np.arange(1, 12001)[::100]
 
     anim = animate_particle_positions(
         all_positions=positions,
         lattice_dimension=params.lattice_dimension,
         timesteps=timesteps,
-        lattice_spacing=params.lattice_spacing,
+        lattice_spacing=2.5,
     )
 
     plt.show()

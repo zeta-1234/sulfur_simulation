@@ -26,6 +26,9 @@
         "tqdm",
         "trange",
         "timesteps",
+        "ifft",
+        "brentq",
+        "waals"
     ],
     "flagWords": [
         "hte",

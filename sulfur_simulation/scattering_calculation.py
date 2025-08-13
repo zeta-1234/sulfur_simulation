@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -19,11 +20,9 @@ class SimulationParameters:
     """Number of timesteps"""
     lattice_dimension: tuple[int, int]
     "Dimension of lattice"
-    lattice_spacing: float = 2.5
-    "Spacing of lattice in Angstroms"
     n_particles: int
     """The number of particles"""
-    rng_seed: int
+    rng_seed: int | None = None
     """rng seed for reproducibility"""
     hopping_calculator: HoppingCalculator
 
@@ -68,7 +67,7 @@ def _make_jump(
     jump_idx: int,
     particle_positions: np.ndarray,
 ) -> np.ndarray:
-    # TODO: this should probably depend on the hopping calculator  # noqa: FIX002
+    # TODO: this list should probably depend on the hopping calculator  # noqa: FIX002
     jump = [
         (-1, -1),
         (-1, 0),
@@ -92,21 +91,36 @@ def _make_jump(
     return particle_positions
 
 
+CUMULATIVE_PROBABILITY_THRESHOLD = 0.5
+
+
+def _assert_cumulative_probability_valid(cumulative_probabilities: np.ndarray) -> None:
+    if cumulative_probabilities[-1] > 1:
+        msg = f"Invalid probability distribution, total probability ({cumulative_probabilities[-1]}) exceeds 1"
+        raise ValueError(msg)
+    if cumulative_probabilities[-1] > CUMULATIVE_PROBABILITY_THRESHOLD:
+        warnings.warn(
+            f"Cumulative probability = {cumulative_probabilities[-1]}, "
+            f"is larger than reccommended threshold {CUMULATIVE_PROBABILITY_THRESHOLD}",
+            stacklevel=2,
+        )
+
+
 def _update_positions(
     particle_positions: np.ndarray[tuple[int, int], np.dtype[np.bool_]],
     jump_probabilities: np.ndarray,
     rng: Generator,
 ) -> np.ndarray:
     true_locations = np.flatnonzero(particle_positions)
-
     # Go through the simulation one particle at a time
     # and make a jump based on jump_probabilities
     for particle_index, initial_location in enumerate(true_locations):
         cumulative_probabilities = np.cumsum(jump_probabilities[particle_index])
-        rand_val = rng.random()
+
+        _assert_cumulative_probability_valid(cumulative_probabilities)
 
         for i, threshold in enumerate(cumulative_probabilities):
-            if rand_val < threshold:
+            if rng.random() < threshold:
                 particle_positions = _make_jump(
                     jump_idx=i,
                     particle_positions=particle_positions,
