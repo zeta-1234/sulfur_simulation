@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import warnings
 from abc import ABC, abstractmethod
-from typing import cast, override
+from functools import cached_property
+from typing import Callable, cast, override
 
 import numpy as np
 from scipy.constants import Boltzmann  # type: ignore[reportMissingTypeStubs]
-from scipy.optimize import brentq  # type: ignore[reportMissingTypeStubs]
+from scipy.optimize import root_scalar, RootResults  # type: ignore[reportMissingTypeStubs]
 
 
 class HoppingCalculator(ABC):
@@ -53,8 +54,8 @@ class SquareHoppingCalculator(HoppingCalculator):
         current_energies = energies[rows, cols][:, None]
 
         # Calculate the rate based on the boltzmann factor
-        # But prevent processes from causing total probability to exceed 1
-        max_exp_arg = np.log(1 / (8 * self._baserate))
+        # Limit exp argument to stop overflows
+        max_exp_arg = np.log(1 / (self._baserate))
         beta = 1 / (2 * Boltzmann * self._temperature)
         energy_difference = neighbor_energies - current_energies
         exponent = np.clip(-beta * energy_difference, a_min=None, a_max=max_exp_arg)
@@ -67,6 +68,9 @@ class SquareHoppingCalculator(HoppingCalculator):
 
         # Prevent self-jumps
         rates[:, 4] = 0
+
+        if np.sum(rates) > 1.0:
+            rates /= np.sum(rates)
 
         return rates
 
@@ -91,82 +95,87 @@ class LineDefectHoppingCalculator(SquareHoppingCalculator):
         return energies
 
 
-class LennardJonesHoppingCalculator(SquareHoppingCalculator):
-    """Hopping Calculator with a Lennard Jones potential between particles.
+class InteractingParticlesHoppingCalculator(SquareHoppingCalculator):
+    """Hopping Calculator with a Lennard Jones potential between particles."""
 
-    Models the particles with a Lennard-Jones potential.
-    ...math:::
-        V(r) = 4 * epsilon * ((sigma / r) ** 12 - (sigma / r) ** 6)
-
-    where epsilon is the depth of the potential well and sigma is the distance at which the potential is zero.
-    """
-
-    def __init__(  # noqa: PLR0913, PLR0917
+    def __init__(
         self,
         baserate: float,
         temperature: float,
         lattice_spacing: float,
-        sigma: float,
-        epsilon: float,
-        cutoff_energy: float = 1.6e-22,
-        max_single_prob: float = 0.2,  # determined relative to the background energy
+        interaction: Callable[[float], float],
+        cutoff_radius_potential: float = 1.6e-22, 
     ) -> None:
         super().__init__(baserate, temperature)
-        self.max_single_prob = max_single_prob
-        self.max_lj_value = self._get_max_lj_value(epsilon=epsilon)
-        self.lj_table = self._get_lj_table(
-            sigma=sigma,
-            epsilon=epsilon,
-            lattice_spacing=lattice_spacing,
-            cutoff_energy=cutoff_energy,
-            max_potential=self.max_lj_value,
-        )
 
-    def _get_max_lj_value(self, epsilon: float) -> float:
-        return epsilon + 2 * Boltzmann * self._temperature * np.log(
-            self.max_single_prob / self._baserate
-        )
-
-    @classmethod
-    def _get_lj_table(
-        cls,
-        sigma: float,
-        epsilon: float,
-        lattice_spacing: float,
-        cutoff_energy: float,
-        max_potential: float,
+        self._lattice_spacing = lattice_spacing
+        self._interaction = interaction
+        self._cutoff_radius_potential = cutoff_radius_potential
+    
+    @cached_property
+    def _potential_table(
+        self
     ) -> dict[tuple[int, int], float]:
-        """Create lookup table for Lennard Jones values."""
-        max_cutoff = 5
+        """Create lookup table for interactin potential values."""
+        max_cutoff_radius = 6
 
-        def lj_potential(r: float) -> float:
-            sr6 = (sigma / r) ** 6
-            sr12 = sr6**2
-            return 4 * epsilon * (sr12 - sr6)
+        def _energy_difference(r: float) -> float:
+            return abs(self._interaction(r)) - self._cutoff_radius_potential
 
-        def energy_difference(r: float) -> float:
-            return abs(lj_potential(r)) - cutoff_energy
+        
+        def _find_cutoff_radius(
+            energy_difference: Callable[[float], float],
+            r_max: float,
+            r_min: float,
+            num_points: int = 1000
+        ) -> float:
+            """
+            Find the largest root of `energy_difference(r)` by scanning inward from r_max.
+            
+            Raises
+            ------
+            ValueError
+                If no root is found in the given range.
+            """
+            r_values = np.linspace(r_max, r_min, num_points)
+            energy_values = [energy_difference(r) for r in r_values]
 
-        try:
-            r_cut = cast(
-                "float", brentq(energy_difference, sigma * 1.01, 5 * lattice_spacing)
-            )
-        except ValueError:
-            r_cut = 5 * lattice_spacing
+            # Scan inward for the first sign change
+            for i in range(len(r_values) - 1):
+                f_current = energy_values[i]
+                f_next = energy_values[i + 1]
 
-        cutoff = min(int(np.ceil(r_cut / lattice_spacing)), max_cutoff)
+                if f_current * f_next < 0:
+                    bracket_a = r_values[i + 1]
+                    bracket_b = r_values[i]
+
+                    # Find root in bracket using Brent's method
+                    solution = cast("RootResults", root_scalar(
+                        energy_difference,
+                        bracket=[bracket_a, bracket_b],
+                        method='brentq'
+                    ))
+
+                    if solution.converged:
+                        return solution.root
+
+            raise ValueError("No root found in the given range.")
+        
+        cutoff_radius = _find_cutoff_radius(energy_difference=_energy_difference, 
+                                            r_max = max_cutoff_radius * self._lattice_spacing, 
+                                            r_min = self._lattice_spacing)
+
+
+        cutoff_radius = int(np.ceil(cutoff_radius / self._lattice_spacing))
+
         lookup: dict[tuple[int, int], float] = {}
-        for dx in range(-cutoff, cutoff + 1):
-            for dy in range(-cutoff, cutoff + 1):
+        for dx in range(-cutoff_radius, cutoff_radius + 1):
+            for dy in range(-cutoff_radius, cutoff_radius + 1):
                 if dx == 0 and dy == 0:
                     continue
-                r = lattice_spacing * np.sqrt(dx**2 + dy**2)
-                if r <= cutoff * lattice_spacing:
-                    sr6 = (sigma / r) ** 6
-                    sr12 = sr6**2
-                    lookup[dx, dy] = np.clip(
-                        4 * epsilon * (sr12 - sr6), a_min=None, a_max=max_potential
-                    )
+                r = self._lattice_spacing * np.sqrt(dx**2 + dy**2)
+                if r <= cutoff_radius * self._lattice_spacing:
+                    lookup[dx, dy] = self._interaction(r)
 
         return lookup
 
@@ -180,11 +189,33 @@ class LennardJonesHoppingCalculator(SquareHoppingCalculator):
         n_rows, n_columns = positions.shape
         occupied_coordinates = np.argwhere(positions)
 
-        # Add Lennard-Jones contributions from each occupied site
+        # Add potential contributions from each occupied site
         for particle_row, particle_col in occupied_coordinates:
-            for (delta_row, delta_col), lj_potential in self.lj_table.items():
+            for (delta_row, delta_col), lj_potential in self._potential_table.items():
                 target_row = (particle_row + delta_row) % n_rows
                 target_col = (particle_col + delta_col) % n_columns
                 energies[target_row, target_col] += lj_potential
 
         return energies
+
+
+def get_lennard_jones_potential(sigma: float, 
+                                epsilon: float,   
+                                cutoff_energy: float = 1.9e-20,
+                                ) -> Callable[[float], float]:
+    """
+    Take float and return Lennard Jones potential.
+    
+    ...math:::
+        V(r) = 4 * epsilon * ((sigma / r) ** 12 - (sigma / r) ** 6)
+        
+    Sigma = radius where potential = 0
+    Epsilon = minimum potential reached
+    """
+    
+    def _potential(r: float) -> float:
+        sr6 = (sigma / r) ** 6
+        sr12 = sr6 ** 2
+        return np.clip(4 * epsilon * (sr12 - sr6), a_min=None, a_max=cutoff_energy)
+
+    return _potential

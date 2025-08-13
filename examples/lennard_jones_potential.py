@@ -5,7 +5,7 @@ from __future__ import annotations
 import matplotlib.pyplot as plt
 import numpy as np
 
-from sulfur_simulation.hopping_calculator import LennardJonesHoppingCalculator
+from sulfur_simulation.hopping_calculator import (InteractingParticlesHoppingCalculator, get_lennard_jones_potential)
 from sulfur_simulation.isf import (
     ISFParameters,
     get_amplitudes,
@@ -26,14 +26,15 @@ if __name__ == "__main__":
         n_timesteps=12000,
         lattice_dimension=(100, 100),
         n_particles=500,
-        hopping_calculator=LennardJonesHoppingCalculator(
+        hopping_calculator=InteractingParticlesHoppingCalculator(
             baserate=0.01,
             temperature=200,
             lattice_spacing=2.5,
-            sigma=2.55,  # distance where LJ potential = 0
-            epsilon=0.03 * 1.6e-19,  # minimum potential at centre
-        ),
-    )
+            interaction=get_lennard_jones_potential(
+                sigma=2.55, 
+                epsilon=0.03 * 1.6e-19,
+            )
+    ))
 
     positions = run_simulation(params=params)
     isf_params = ISFParameters(params=params)
