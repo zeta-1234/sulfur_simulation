@@ -44,6 +44,11 @@ class ISFParameters:
     """Prefactor for scattered amplitude"""
 
     @property
+    def n_delta_k(self) -> int:
+        """Number of delta_k values."""
+        return self.delta_k_array.shape[0]
+
+    @property
     def delta_k_array(self) -> np.ndarray:
         """All delta_k values."""
         return _get_delta_k(delta_k_max=self.delta_k_max, params=self.params)
@@ -147,7 +152,7 @@ def get_amplitudes(
 ) -> np.ndarray[tuple[int, int], np.dtype[np.complex128]]:
     """Return summed complex amplitudes for each delta_k (rows) and timestep (columns)."""
     n_timesteps, dimension, _ = positions.shape
-    n_delta_k = isf_params.delta_k_array.shape[0]
+    n_delta_k = isf_params.n_delta_k
 
     amplitudes = np.zeros((n_delta_k, n_timesteps), dtype=np.complex128)
 

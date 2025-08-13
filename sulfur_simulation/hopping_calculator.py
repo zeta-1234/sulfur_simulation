@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import warnings
 from abc import ABC, abstractmethod
 from typing import cast, override
 
@@ -52,10 +53,16 @@ class SquareHoppingCalculator(HoppingCalculator):
         current_energies = energies[rows, cols][:, None]
 
         # Calculate the rate based on the boltzmann factor
-        max_exp_arg = np.log(0.51 / self._baserate)
+        # But prevent processes from causing total probability to exceed 1
+        max_exp_arg = np.log(1 / (8 * self._baserate))
         beta = 1 / (2 * Boltzmann * self._temperature)
         energy_difference = neighbor_energies - current_energies
         exponent = np.clip(-beta * energy_difference, a_min=None, a_max=max_exp_arg)
+        if np.any(np.isclose(exponent, max_exp_arg)):
+            warnings.warn(
+                "Some energy differences are too large, the resulting distribution may be inaccurate.",
+                stacklevel=2,
+            )
         rates = np.exp(exponent) * self._baserate
 
         # Prevent self-jumps
@@ -85,7 +92,14 @@ class LineDefectHoppingCalculator(SquareHoppingCalculator):
 
 
 class LennardJonesHoppingCalculator(SquareHoppingCalculator):
-    """Hopping Calculator with a Lennard Jones potential between particles."""
+    """Hopping Calculator with a Lennard Jones potential between particles.
+
+    Models the particles with a Lennard-Jones potential.
+    ...math:::
+        V(r) = 4 * epsilon * ((sigma / r) ** 12 - (sigma / r) ** 6)
+
+    where epsilon is the depth of the potential well and sigma is the distance at which the potential is zero.
+    """
 
     def __init__(  # noqa: PLR0913, PLR0917
         self,
