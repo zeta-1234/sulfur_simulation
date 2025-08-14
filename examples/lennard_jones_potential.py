@@ -18,7 +18,9 @@ from sulfur_simulation.isf import (
 )
 from sulfur_simulation.scattering_calculation import (
     SimulationParameters,
+    jump_counter,
     run_simulation,
+    sampled_jumps,
 )
 from sulfur_simulation.show_simulation import (
     animate_particle_positions,
@@ -33,11 +35,9 @@ if __name__ == "__main__":
             baserate=0.01,
             temperature=200,
             lattice_spacing=2.5,
-            interaction=get_lennard_jones_potential(
-                sigma=2.55,
-                epsilon=0.03 * 1.6e-19,
-            )
-    ))
+            interaction=get_lennard_jones_potential(sigma=2.55, epsilon=0.03 * 1.6e-19),
+        ),
+    )
 
     positions = run_simulation(params=params)
     isf_params = ISFParameters(params=params)
@@ -67,3 +67,20 @@ if __name__ == "__main__":
     )
 
     plt.show()
+    print(f"sampled jumps: {sampled_jumps}")
+    print(jump_counter)
+
+    indices = np.arange(len(jump_counter))
+    width = 0.35  # width of the bars
+
+    plt.bar(indices - width / 2, jump_counter, width, label="jump_counter")
+    plt.bar(indices + width / 2, sampled_jumps, width, label="sampled_jumps")
+    plt.xlabel("Jump index")
+    plt.ylabel("Count")
+    plt.legend()
+    plt.show()
+
+# TODO: fit ISFs better, try a fixed window
+# TODO: longer simulation, improve efficiency
+# TODO: Gillespie algorithm??
+# TODO: decrease base jump rate

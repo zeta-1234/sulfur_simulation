@@ -62,6 +62,9 @@ def _get_next_index(
     return _wrap_index((initial_index[0] + jump[0], initial_index[1] + jump[1]), shape)
 
 
+jump_counter = np.zeros(9)
+
+
 def _make_jump(
     initial_position: int,
     jump_idx: int,
@@ -79,6 +82,7 @@ def _make_jump(
         (1, 0),
         (1, 1),
     ][jump_idx]
+
     initial_index = np.unravel_index(initial_position, particle_positions.shape)
     final_idx = _get_next_index(initial_index, jump, particle_positions.shape)  # type: ignore[no-any-return]
 
@@ -88,6 +92,7 @@ def _make_jump(
 
     particle_positions[final_idx] = True
     particle_positions[initial_index] = False
+    jump_counter[jump_idx] += 1
     return particle_positions
 
 
@@ -106,27 +111,38 @@ def _assert_cumulative_probability_valid(cumulative_probabilities: np.ndarray) -
         )
 
 
+sampled_jumps = np.zeros(9)
+
+
 def _update_positions(
     particle_positions: np.ndarray[tuple[int, int], np.dtype[np.bool_]],
     jump_probabilities: np.ndarray,
     rng: Generator,
 ) -> np.ndarray:
     true_locations = np.flatnonzero(particle_positions)
-    # Go through the simulation one particle at a time
-    # and make a jump based on jump_probabilities
-    for particle_index, initial_location in enumerate(true_locations):
-        cumulative_probabilities = np.cumsum(jump_probabilities[particle_index])
+    particle_indices = np.arange(len(true_locations))
+    rng.shuffle(particle_indices)
 
+    for idx in particle_indices:
+        initial_location = true_locations[idx]
+        move_probs = jump_probabilities[idx]
+        stay_prob = max(0.0, 1.0 - move_probs.sum())
+        choices = np.arange(len(move_probs) + 1)  # last index = stay put
+        probs = np.append(move_probs, stay_prob)
+
+        # Just for the check
+        cumulative_probabilities = np.cumsum(move_probs)
         _assert_cumulative_probability_valid(cumulative_probabilities)
 
-        for i, threshold in enumerate(cumulative_probabilities):
-            if rng.random() < threshold:
-                particle_positions = _make_jump(
-                    jump_idx=i,
-                    particle_positions=particle_positions,
-                    initial_position=initial_location,
-                )
-                break
+        jump_idx = rng.choice(choices, p=probs)
+
+        if jump_idx < len(move_probs):
+            sampled_jumps[jump_idx] += 1
+            particle_positions = _make_jump(
+                jump_idx=jump_idx,
+                particle_positions=particle_positions,
+                initial_position=initial_location,
+            )
 
     return particle_positions
 

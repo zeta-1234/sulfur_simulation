@@ -54,7 +54,9 @@ class ISFParameters:
         return _get_delta_k(delta_k_max=self.delta_k_max, params=self.params)
 
 
-def _get_autocorrelation(amplitudes: np.ndarray) -> np.ndarray[Any, np.dtype[np.complex128]]:
+def _get_autocorrelation(
+    amplitudes: np.ndarray,
+) -> np.ndarray[Any, np.dtype[np.complex128]]:
     """Compute the autocorrelation of a complex-valued 1D signal."""
     n = len(amplitudes)
     padded_length = 2 * n - 1
@@ -86,7 +88,7 @@ def plot_isf(
     autocorrelation = _get_autocorrelation(x[delta_k_index])
     optimal_params = _fit_gaussian_decay(t=t, autocorrelation=autocorrelation)
 
-    ax.plot(t, autocorrelation, label="data_real")
+    ax.plot(t, autocorrelation, label="data")
     ax.plot(t, _gaussian_decay_function(t, *optimal_params), "r-", label="Fitted Curve")
     ax.legend()
     ax.set_title(f"ISF of A for delta_k = {isf_params.delta_k_array[delta_k_index]}")
