@@ -44,7 +44,7 @@ def animate_particle_positions_square(
     particle_scatter: PathCollection = ax.scatter(
         [], [], color="red", s=20, edgecolors="black", zorder=1
     )
-    ax.legend(["Particles", "Sites"], loc="upper right")
+    ax.legend(["Particles", "Sites"], loc="lower right")
 
     def update(frame: int) -> tuple[PathCollection]:
         occupancy = all_positions[frame]
@@ -80,13 +80,10 @@ def animate_particle_positions_hexagonal(
     dx = lattice_spacing
     dy = lattice_spacing * np.sqrt(3) / 2
 
-    # No axes, ticks, or labels
-    ax.axis("off")
-    ax.set_aspect("equal")
-
-    # Draw lattice sites
+    # Precompute lattice coordinates
     lattice_x = np.zeros(lattice_dimension[0] * lattice_dimension[1])
     lattice_y = np.zeros_like(lattice_x)
+
     index = 0
     for row in range(lattice_dimension[1]):
         for col in range(lattice_dimension[0]):
@@ -94,6 +91,16 @@ def animate_particle_positions_hexagonal(
             lattice_y[index] = row * dy
             index += 1
 
+    # Set axis limits based on lattice extent
+    ax.set_xlim(lattice_x.min() - dx, lattice_x.max() + dx)
+    ax.set_ylim(lattice_y.min() - dy, lattice_y.max() + dy)
+    ax.set_aspect("equal")
+
+    # Hide tick labels but keep axis lines
+    ax.set_xticks([])
+    ax.set_yticks([])
+
+    # Draw lattice sites
     ax.scatter(
         lattice_x, lattice_y, color="aqua", marker=".", s=5, zorder=0, label="Sites"
     )
@@ -103,12 +110,16 @@ def animate_particle_positions_hexagonal(
         [], [], color="red", s=20, edgecolors="black", zorder=1
     )
 
+    # Legend
+    ax.legend(["Particles", "Sites"], loc="upper right")
+
     def update(frame: int) -> tuple[PathCollection]:
         occupancy = all_positions[frame]
         rows, cols = np.nonzero(occupancy)
         x = cols * dx + (dx / 2) * rows
         y = rows * dy
         particle_scatter.set_offsets(np.c_[x, y])
+        ax.set_title(f"Timestep: {frame}")
         return (particle_scatter,)
 
     return animation.FuncAnimation(

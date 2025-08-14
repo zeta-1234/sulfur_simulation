@@ -29,7 +29,7 @@ from sulfur_simulation.show_simulation import (
 
 if __name__ == "__main__":
     params = SimulationParameters(
-        n_timesteps=100,
+        n_timesteps=12000,
         lattice_dimension=(100, 100),
         n_particles=500,
         hopping_calculator=InteractingHoppingCalculator(
@@ -58,7 +58,7 @@ if __name__ == "__main__":
         ax=ax2,
     )
 
-    timesteps = np.arange(1, 100)[::1]
+    timesteps = np.arange(1, 12000)[::20]
 
     anim = animate_particle_positions_square(
         all_positions=positions,
