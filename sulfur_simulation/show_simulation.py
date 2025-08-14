@@ -12,35 +12,103 @@ if TYPE_CHECKING:
     from sulfur_simulation.scattering_calculation import SimulationParameters
 
 
-def animate_particle_positions(
+def animate_particle_positions_square(
     all_positions: np.ndarray[tuple[int, int, int], np.dtype[np.bool_]],
     lattice_dimension: tuple[int, int],
     timesteps: np.ndarray,
     lattice_spacing: float = 2.5,
 ) -> animation.FuncAnimation:
-    """Animate particle positions from boolean occupancy arrays over time."""
+    """Animate particle positions with lattice sites as blue stars."""
     fig, ax = plt.subplots(figsize=(6, 6))
     ax.set_xlim(-lattice_spacing, lattice_dimension[0] * lattice_spacing)
     ax.set_ylim(-lattice_spacing, lattice_dimension[1] * lattice_spacing)
     ax.set_aspect("equal")
     ax.set_title("Particle Simulation")
 
-    # Initially no points
-    particle_scatter: PathCollection = ax.scatter(
-        [], [], color="red", s=20, edgecolors="black"
+    # Draw lattice sites as blue stars once
+    lattice_x, lattice_y = np.meshgrid(
+        np.arange(lattice_dimension[0]) * lattice_spacing,
+        np.arange(lattice_dimension[1]) * lattice_spacing,
     )
-    ax.legend(["Particles"], loc="upper right")
+    ax.scatter(
+        lattice_x.ravel(),
+        lattice_y.ravel(),
+        color="aqua",
+        marker=".",
+        s=5,
+        zorder=0,
+        label="Sites",
+    )
+
+    # Particle scatter on top of lattice stars
+    particle_scatter: PathCollection = ax.scatter(
+        [], [], color="red", s=20, edgecolors="black", zorder=1
+    )
+    ax.legend(["Particles", "Sites"], loc="upper right")
 
     def update(frame: int) -> tuple[PathCollection]:
         occupancy = all_positions[frame]
         rows, cols = np.nonzero(occupancy)
 
-        # Convert lattice indices to physical positions (x=cols, y=rows)
+        # Convert lattice indices to physical positions
         x = cols * lattice_spacing
         y = rows * lattice_spacing
 
         particle_scatter.set_offsets(np.c_[x, y])
         ax.set_title(f"Timestep: {frame}")
+        return (particle_scatter,)
+
+    return animation.FuncAnimation(
+        fig,
+        update,
+        frames=timesteps,
+        interval=5000 / len(timesteps),
+        blit=False,
+        repeat=True,
+    )
+
+
+def animate_particle_positions_hexagonal(
+    all_positions: np.ndarray,  # shape (timesteps, rows, cols), dtype=bool
+    lattice_dimension: tuple[int, int],
+    timesteps: np.ndarray,
+    lattice_spacing: float = 2.5,
+) -> animation.FuncAnimation:
+    """Animate particle positions on a hexagonal close-packed (HCP) lattice."""
+    fig, ax = plt.subplots(figsize=(6, 6))
+
+    dx = lattice_spacing
+    dy = lattice_spacing * np.sqrt(3) / 2
+
+    # No axes, ticks, or labels
+    ax.axis("off")
+    ax.set_aspect("equal")
+
+    # Draw lattice sites
+    lattice_x = np.zeros(lattice_dimension[0] * lattice_dimension[1])
+    lattice_y = np.zeros_like(lattice_x)
+    index = 0
+    for row in range(lattice_dimension[1]):
+        for col in range(lattice_dimension[0]):
+            lattice_x[index] = col * dx + (dx / 2) * row
+            lattice_y[index] = row * dy
+            index += 1
+
+    ax.scatter(
+        lattice_x, lattice_y, color="aqua", marker=".", s=5, zorder=0, label="Sites"
+    )
+
+    # Particle scatter
+    particle_scatter: PathCollection = ax.scatter(
+        [], [], color="red", s=20, edgecolors="black", zorder=1
+    )
+
+    def update(frame: int) -> tuple[PathCollection]:
+        occupancy = all_positions[frame]
+        rows, cols = np.nonzero(occupancy)
+        x = cols * dx + (dx / 2) * rows
+        y = rows * dy
+        particle_scatter.set_offsets(np.c_[x, y])
         return (particle_scatter,)
 
     return animation.FuncAnimation(

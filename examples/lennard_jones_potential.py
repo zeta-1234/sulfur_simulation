@@ -23,12 +23,13 @@ from sulfur_simulation.scattering_calculation import (
     sampled_jumps,
 )
 from sulfur_simulation.show_simulation import (
-    animate_particle_positions,
+    animate_particle_positions_hexagonal,
+    animate_particle_positions_square,
 )
 
 if __name__ == "__main__":
     params = SimulationParameters(
-        n_timesteps=12000,
+        n_timesteps=100,
         lattice_dimension=(100, 100),
         n_particles=500,
         hopping_calculator=InteractingHoppingCalculator(
@@ -57,9 +58,16 @@ if __name__ == "__main__":
         ax=ax2,
     )
 
-    timesteps = np.arange(1, 12000)[::20]
+    timesteps = np.arange(1, 100)[::1]
 
-    anim = animate_particle_positions(
+    anim = animate_particle_positions_square(
+        all_positions=positions,
+        lattice_dimension=params.lattice_dimension,
+        timesteps=timesteps,
+        lattice_spacing=2.5,
+    )
+
+    anim2 = animate_particle_positions_hexagonal(
         all_positions=positions,
         lattice_dimension=params.lattice_dimension,
         timesteps=timesteps,
