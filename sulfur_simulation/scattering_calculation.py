@@ -120,23 +120,23 @@ def _update_positions(
     rng: Generator,
 ) -> np.ndarray:
     true_locations = np.flatnonzero(particle_positions)
-    particle_indices = np.arange(len(true_locations))
-    rng.shuffle(particle_indices)
+    particle_indices = rng.permutation(len(true_locations))  # randomize order
+    n_jumps = jump_probabilities.shape[1]
 
     for idx in particle_indices:
-        initial_location = true_locations[idx]
+        initial_location = int(true_locations[idx])  # ensure it's a scalar int
         move_probs = jump_probabilities[idx]
+
         stay_prob = max(0.0, 1.0 - move_probs.sum())
-        choices = np.arange(len(move_probs) + 1)  # last index = stay put
         probs = np.append(move_probs, stay_prob)
 
-        # Just for the check
+        # Just a check
         cumulative_probabilities = np.cumsum(move_probs)
         _assert_cumulative_probability_valid(cumulative_probabilities)
 
-        jump_idx = rng.choice(choices, p=probs)
+        jump_idx = rng.choice(len(probs), p=probs)
 
-        if jump_idx < len(move_probs):
+        if jump_idx < n_jumps:
             sampled_jumps[jump_idx] += 1
             particle_positions = _make_jump(
                 jump_idx=jump_idx,
