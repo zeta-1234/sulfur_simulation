@@ -17,7 +17,22 @@
         "xlabel",
         "ylabel",
         "pyproject",
-        "scipy"
+        "scipy",
+        "neighbour",
+        "maxfev",
+        "blit",
+        "xlim",
+        "ylim",
+        "xticks",
+        "yticks",
+        "tqdm",
+        "trange",
+        "timesteps",
+        "ifft",
+        "brentq",
+        "waals",
+        "zorder",
+        "xticklabels"
     ],
     "flagWords": [
         "hte",
