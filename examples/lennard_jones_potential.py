@@ -25,15 +25,16 @@ from sulfur_simulation.scattering_calculation import (
 from sulfur_simulation.show_simulation import (
     animate_particle_positions_hexagonal,
     animate_particle_positions_square,
+    create_jump_plot,
 )
 
 if __name__ == "__main__":
     params = SimulationParameters(
-        n_timesteps=12000,
+        n_timesteps=1000,
         lattice_dimension=(100, 100),
         n_particles=500,
         hopping_calculator=InteractingHoppingCalculator(
-            baserate=0.01,
+            baserate=(0.01, 0.01 / 5),
             temperature=200,
             lattice_spacing=2.5,
             interaction=get_lennard_jones_potential(sigma=2.55, epsilon=0.03 * 1.6e-19),
@@ -58,7 +59,7 @@ if __name__ == "__main__":
         ax=ax2,
     )
 
-    timesteps = np.arange(1, 12000)[::20]
+    timesteps = np.arange(1, 1000)[::50]
 
     anim = animate_particle_positions_square(
         all_positions=positions,
@@ -74,21 +75,7 @@ if __name__ == "__main__":
         lattice_spacing=2.5,
     )
 
+    jump_count = create_jump_plot(
+        jump_counter=jump_counter, sampled_jumps=sampled_jumps
+    )
     plt.show()
-    print(f"sampled jumps: {sampled_jumps}")
-    print(jump_counter)
-
-    indices = np.arange(len(jump_counter))
-    width = 0.35  # width of the bars
-
-    plt.bar(indices - width / 2, jump_counter, width, label="jump_counter")
-    plt.bar(indices + width / 2, sampled_jumps, width, label="sampled_jumps")
-    plt.xlabel("Jump index")
-    plt.ylabel("Count")
-    plt.legend()
-    plt.show()
-
-# TODO: fit ISFs better, try a fixed window
-# TODO: longer simulation, improve efficiency
-# TODO: Gillespie algorithm??
-# TODO: decrease base jump rate

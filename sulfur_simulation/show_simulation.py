@@ -8,6 +8,7 @@ from matplotlib import animation
 
 if TYPE_CHECKING:
     from matplotlib.collections import PathCollection
+    from matplotlib.figure import Figure
 
     from sulfur_simulation.scattering_calculation import SimulationParameters
 
@@ -44,7 +45,7 @@ def animate_particle_positions_square(
     particle_scatter: PathCollection = ax.scatter(
         [], [], color="red", s=20, edgecolors="black", zorder=1
     )
-    ax.legend(["Particles", "Sites"], loc="lower right")
+    ax.legend(["Sites", "Particles"], loc="lower right")
 
     def update(frame: int) -> tuple[PathCollection]:
         occupancy = all_positions[frame]
@@ -111,7 +112,7 @@ def animate_particle_positions_hexagonal(
     )
 
     # Legend
-    ax.legend(["Particles", "Sites"], loc="upper right")
+    ax.legend(["Sites", "Particles"], loc="lower right")
 
     def update(frame: int) -> tuple[PathCollection]:
         occupancy = all_positions[frame]
@@ -156,3 +157,42 @@ def get_timeframe_str(
         lines.append(" ".join(colored_row))
 
     return "\n".join(lines)
+
+
+def create_jump_plot(jump_counter: np.ndarray, sampled_jumps: np.ndarray) -> Figure:
+    """Plot attempted and successful jump counts."""
+    delta = np.array(
+        [
+            (-1, -1),
+            (-1, 0),
+            (-1, 1),
+            (0, -1),
+            (0, 0),
+            (0, 1),
+            (1, -1),
+            (1, 0),
+            (1, 1),
+        ]
+    )
+    labels = [f"{d}" for d in delta]
+
+    print(f"Attempted jumps: {sampled_jumps}")  # noqa: T201
+    print(f"Successful jumps: {jump_counter}")  # noqa: T201
+
+    indices = np.arange(len(jump_counter))
+    width = 0.35
+
+    fig, ax = plt.subplots()
+    ax.bar(indices - width / 2, jump_counter, width, label="Successful jumps")
+    ax.bar(indices + width / 2, sampled_jumps, width, label="Attempted jumps")
+    ax.set_xlabel("Direction (delta row, delta col)")
+    ax.set_ylabel("Count")
+    ax.set_xticks(indices)
+    ax.set_xticklabels(labels, rotation=45)
+
+    for tick, label in zip(ax.get_xticks(), ax.get_xticklabels(), strict=False):
+        if labels[int(tick)] == "(0, 0)":
+            label.set_color("gray")
+
+    ax.legend()
+    return fig
