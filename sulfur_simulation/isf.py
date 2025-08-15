@@ -88,7 +88,7 @@ def plot_isf(
     autocorrelation = _get_autocorrelation(x[delta_k_index])
     optimal_params = _fit_gaussian_decay(t=t, autocorrelation=autocorrelation)
 
-    ax.plot(t, autocorrelation, label="data")
+    ax.plot(t, autocorrelation, label="data_real")
     ax.plot(t, _gaussian_decay_function(t, *optimal_params), "r-", label="Fitted Curve")
     ax.legend()
     ax.set_title(f"ISF of A for delta_k = {isf_params.delta_k_array[delta_k_index]}")

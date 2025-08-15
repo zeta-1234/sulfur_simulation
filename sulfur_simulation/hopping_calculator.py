@@ -77,6 +77,9 @@ class SquareHoppingCalculator(HoppingCalculator):
         if np.sum(rates) > 1.0:
             rates /= np.sum(rates)
 
+        if np.sum(rates) > 1.0:
+            rates /= np.sum(rates)
+
         return rates
 
     def _get_energy_landscape(
