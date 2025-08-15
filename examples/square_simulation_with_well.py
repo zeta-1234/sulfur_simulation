@@ -20,7 +20,7 @@ from sulfur_simulation.scattering_calculation import (
     run_simulation,
 )
 from sulfur_simulation.show_simulation import (
-    animate_particle_positions,
+    animate_particle_positions_square,
 )
 
 if __name__ == "__main__":
@@ -29,7 +29,9 @@ if __name__ == "__main__":
         lattice_dimension=(100, 100),
         n_particles=500,
         rng_seed=2,
-        hopping_calculator=LineDefectHoppingCalculator(baserate=0.01, temperature=200),
+        hopping_calculator=LineDefectHoppingCalculator(
+            baserate=(0.01, 0.01 / 5), temperature=200
+        ),
     )
 
     positions = run_simulation(params=params)
@@ -53,7 +55,7 @@ if __name__ == "__main__":
 
     timesteps = np.arange(1, 12001)[::100]
 
-    anim = animate_particle_positions(
+    anim = animate_particle_positions_square(
         all_positions=positions,
         lattice_dimension=params.lattice_dimension,
         timesteps=timesteps,
