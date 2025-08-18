@@ -58,7 +58,7 @@ if __name__ == "__main__":
         ax=ax2,
     )
 
-    timesteps = np.arange(1, 3000)[::20]
+    timesteps = np.arange(1, 3000)[::20].astype(np.float64)
 
     anim = animate_particle_positions_square(
         all_positions=result.positions,
