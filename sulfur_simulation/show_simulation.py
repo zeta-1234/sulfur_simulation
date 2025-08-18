@@ -6,6 +6,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib import animation
 
+from sulfur_simulation.scattering_calculation import JUMP_DIRECTIONS
+
 if TYPE_CHECKING:
     from matplotlib.collections import PathCollection
     from matplotlib.figure import Figure
@@ -69,19 +71,18 @@ def animate_particle_positions_square(
     )
 
 
-def animate_particle_positions_hexagonal(
+def animate_particle_positions_skewed(
     all_positions: np.ndarray,  # shape (timesteps, rows, cols), dtype=bool
     lattice_dimension: tuple[int, int],
     timesteps: np.ndarray,
-    lattice_spacing: float = 2.5,
+    dx_dy: tuple[float, float],
 ) -> animation.FuncAnimation:
     """Animate particle positions on a hexagonal close-packed (HCP) lattice."""
     fig, ax = plt.subplots(figsize=(6, 6))
 
-    dx = lattice_spacing
-    dy = lattice_spacing * np.sqrt(3) / 2
+    dx = dx_dy[0]
+    dy = dx_dy[1]
 
-    # Precompute lattice coordinates
     lattice_x = np.zeros(lattice_dimension[0] * lattice_dimension[1])
     lattice_y = np.zeros_like(lattice_x)
 
@@ -92,26 +93,21 @@ def animate_particle_positions_hexagonal(
             lattice_y[index] = row * dy
             index += 1
 
-    # Set axis limits based on lattice extent
     ax.set_xlim(lattice_x.min() - dx, lattice_x.max() + dx)
     ax.set_ylim(lattice_y.min() - dy, lattice_y.max() + dy)
     ax.set_aspect("equal")
 
-    # Hide tick labels but keep axis lines
     ax.set_xticks([])
     ax.set_yticks([])
 
-    # Draw lattice sites
     ax.scatter(
         lattice_x, lattice_y, color="aqua", marker=".", s=5, zorder=0, label="Sites"
     )
 
-    # Particle scatter
     particle_scatter: PathCollection = ax.scatter(
         [], [], color="red", s=20, edgecolors="black", zorder=1
     )
 
-    # Legend
     ax.legend(["Sites", "Particles"], loc="lower right")
 
     def update(frame: int) -> tuple[PathCollection]:
@@ -159,25 +155,10 @@ def get_timeframe_str(
     return "\n".join(lines)
 
 
-def create_jump_plot(jump_counter: np.ndarray, sampled_jumps: np.ndarray) -> Figure:
+def plot_jump_rates(jump_counter: np.ndarray, sampled_jumps: np.ndarray) -> Figure:
     """Plot attempted and successful jump counts."""
-    delta = np.array(
-        [
-            (-1, -1),
-            (-1, 0),
-            (-1, 1),
-            (0, -1),
-            (0, 0),
-            (0, 1),
-            (1, -1),
-            (1, 0),
-            (1, 1),
-        ]
-    )
+    delta = JUMP_DIRECTIONS
     labels = [f"{d}" for d in delta]
-
-    print(f"Attempted jumps: {sampled_jumps}")  # noqa: T201
-    print(f"Successful jumps: {jump_counter}")  # noqa: T201
 
     indices = np.arange(len(jump_counter))
     width = 0.35

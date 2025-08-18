@@ -18,19 +18,17 @@ from sulfur_simulation.isf import (
 )
 from sulfur_simulation.scattering_calculation import (
     SimulationParameters,
-    jump_counter,
     run_simulation,
-    sampled_jumps,
 )
 from sulfur_simulation.show_simulation import (
-    animate_particle_positions_hexagonal,
+    animate_particle_positions_skewed,
     animate_particle_positions_square,
-    create_jump_plot,
+    plot_jump_rates,
 )
 
 if __name__ == "__main__":
     params = SimulationParameters(
-        n_timesteps=1000,
+        n_timesteps=3000,
         lattice_dimension=(100, 100),
         n_particles=500,
         hopping_calculator=InteractingHoppingCalculator(
@@ -41,7 +39,7 @@ if __name__ == "__main__":
         ),
     )
 
-    positions = run_simulation(params=params)
+    positions = run_simulation(params=params, rng_seed=1)
     isf_params = ISFParameters(params=params)
     amplitudes = get_amplitudes(isf_params=isf_params, positions=positions)
 
@@ -59,7 +57,7 @@ if __name__ == "__main__":
         ax=ax2,
     )
 
-    timesteps = np.arange(1, 1000)[::50]
+    timesteps = np.arange(1, 3000)[::20]
 
     anim = animate_particle_positions_square(
         all_positions=positions,
@@ -68,14 +66,15 @@ if __name__ == "__main__":
         lattice_spacing=2.5,
     )
 
-    anim2 = animate_particle_positions_hexagonal(
+    anim2 = animate_particle_positions_skewed(
         all_positions=positions,
         lattice_dimension=params.lattice_dimension,
         timesteps=timesteps,
-        lattice_spacing=2.5,
+        dx_dy=(2.5, 2.5 * np.sqrt(3) / 2),
     )
 
-    jump_count = create_jump_plot(
-        jump_counter=jump_counter, sampled_jumps=sampled_jumps
+    jump_count = plot_jump_rates(
+        jump_counter=params.results.jump_counter,
+        sampled_jumps=params.results.attempted_jump_counter,
     )
     plt.show()

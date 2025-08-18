@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-import warnings
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -11,8 +10,22 @@ if TYPE_CHECKING:
     from hopping_calculator import HoppingCalculator
     from numpy.random import Generator
 
+JUMP_DIRECTIONS = np.array(
+    [
+        (-1, -1),
+        (-1, 0),
+        (-1, 1),
+        (0, -1),
+        (0, 0),
+        (0, 1),
+        (1, -1),
+        (1, 0),
+        (1, 1),
+    ]
+)
 
-@dataclass(kw_only=True, frozen=True)
+
+@dataclass(kw_only=True)
 class SimulationParameters:
     """Parameters for simulating diffusion."""
 
@@ -22,9 +35,15 @@ class SimulationParameters:
     "Dimension of lattice"
     n_particles: int
     """The number of particles"""
-    rng_seed: int | None = None
-    """rng seed for reproducibility"""
     hopping_calculator: HoppingCalculator
+    results: SimulationResults = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.results = SimulationResults(
+            positions=np.empty((self.n_timesteps, *self.lattice_dimension), dtype=bool),
+            jump_counter=np.zeros(9),
+            attempted_jump_counter=np.zeros(9),
+        )
 
     @property
     def times(self) -> np.ndarray:
@@ -45,10 +64,22 @@ class SimulationParameters:
             msg = "More particles than lattice spaces"
             raise ValueError(msg)
 
-        rng = np.random.default_rng(seed=self.rng_seed)
+        rng = np.random.default_rng()
         initial_positions = np.zeros(self.lattice_dimension, dtype=bool).ravel()
         initial_positions[: self.n_particles] = True
         return rng.permutation(initial_positions).reshape(self.lattice_dimension)
+
+
+@dataclass(kw_only=True)
+class SimulationResults:
+    """Results of a simulation."""
+
+    positions: np.ndarray
+    "The particles' positions at each timestep"
+    jump_counter: np.ndarray
+    "The number of successful jumps in each direction"
+    attempted_jump_counter: np.ndarray
+    "The number of jumps attempted"
 
 
 def _wrap_index(index: tuple[int, int], shape: tuple[int, int]) -> tuple[int, int]:
@@ -62,26 +93,13 @@ def _get_next_index(
     return _wrap_index((initial_index[0] + jump[0], initial_index[1] + jump[1]), shape)
 
 
-jump_counter = np.zeros(9)
-
-
 def _make_jump(
     initial_position: int,
     jump_idx: int,
     particle_positions: np.ndarray,
+    params: SimulationParameters,
 ) -> np.ndarray:
-    # TODO: this list should probably depend on the hopping calculator  # noqa: FIX002
-    jump = [
-        (-1, -1),
-        (-1, 0),
-        (-1, 1),
-        (0, -1),
-        (0, 0),
-        (0, 1),
-        (1, -1),
-        (1, 0),
-        (1, 1),
-    ][jump_idx]
+    jump = JUMP_DIRECTIONS[jump_idx]
 
     initial_index = np.unravel_index(initial_position, particle_positions.shape)
     final_idx = _get_next_index(initial_index, jump, particle_positions.shape)  # type: ignore[no-any-return]
@@ -90,71 +108,52 @@ def _make_jump(
     if particle_positions[final_idx]:
         return particle_positions
 
+    params.results.jump_counter[jump_idx] += 1
     particle_positions[final_idx] = True
     particle_positions[initial_index] = False
-    jump_counter[jump_idx] += 1
     return particle_positions
 
 
-CUMULATIVE_PROBABILITY_THRESHOLD = 0.5
-
-
-def _assert_cumulative_probability_valid(cumulative_probabilities: np.ndarray) -> None:
-    if cumulative_probabilities[-1] > 1:
-        msg = f"Invalid probability distribution, total probability ({cumulative_probabilities[-1]}) exceeds 1"
+def _assert_cumulative_probability_valid(move_probabilities: np.ndarray) -> None:
+    total_probability = np.sum(move_probabilities)
+    if not np.isclose(total_probability, 1):
+        msg = f"Invalid probability distribution, total probability ({total_probability}) != 1"
         raise ValueError(msg)
-    if cumulative_probabilities[-1] > CUMULATIVE_PROBABILITY_THRESHOLD:
-        warnings.warn(
-            f"Cumulative probability = {cumulative_probabilities[-1]}, "
-            f"is larger than reccommended threshold {CUMULATIVE_PROBABILITY_THRESHOLD}",
-            stacklevel=2,
-        )
-
-
-sampled_jumps = np.zeros(9)
 
 
 def _update_positions(
     particle_positions: np.ndarray[tuple[int, int], np.dtype[np.bool_]],
     jump_probabilities: np.ndarray,
+    params: SimulationParameters,
     rng: Generator,
 ) -> np.ndarray:
     true_locations = np.flatnonzero(particle_positions)
-    particle_indices = rng.permutation(len(true_locations))  # randomize order
-    n_jumps = jump_probabilities.shape[1]
 
-    for idx in particle_indices:
-        initial_location = int(true_locations[idx])  # ensure it's a scalar int
-        move_probs = jump_probabilities[idx]
+    for idx in rng.permutation(len(true_locations)):
+        initial_location = int(true_locations[idx])
+        move_probabilities = jump_probabilities[idx]
 
-        stay_prob = max(0.0, 1.0 - move_probs.sum())
-        probs = np.append(move_probs, stay_prob)
+        _assert_cumulative_probability_valid(move_probabilities)
 
-        # Just a check
-        cumulative_probabilities = np.cumsum(move_probs)
-        _assert_cumulative_probability_valid(cumulative_probabilities)
+        jump_idx = rng.choice(len(move_probabilities), p=move_probabilities)
+        stationary_index = 4
 
-        jump_idx = rng.choice(len(probs), p=probs)
-
-        if jump_idx < n_jumps:
-            sampled_jumps[jump_idx] += 1
+        if jump_idx != stationary_index:
+            params.results.attempted_jump_counter[jump_idx] += 1
             particle_positions = _make_jump(
                 jump_idx=jump_idx,
                 particle_positions=particle_positions,
                 initial_position=initial_location,
+                params=params,
             )
 
     return particle_positions
 
 
-def run_simulation(
-    params: SimulationParameters,
-) -> np.ndarray:
+def run_simulation(params: SimulationParameters, rng_seed: int) -> np.ndarray:
     """Run the simulation."""
-    rng = np.random.default_rng(seed=params.rng_seed)
-    all_positions = np.empty(
-        (params.n_timesteps, *params.lattice_dimension), dtype=np.bool_
-    )
+    rng = np.random.default_rng(seed=rng_seed)
+    all_positions = params.results.positions
     all_positions[0] = params.initial_positions
 
     for i in trange(1, params.n_timesteps):
@@ -163,6 +162,7 @@ def run_simulation(
         )
 
         all_positions[i] = _update_positions(
+            params=params,
             particle_positions=all_positions[i - 1],
             jump_probabilities=jump_probabilities,
             rng=rng,

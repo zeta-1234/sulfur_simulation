@@ -12,6 +12,8 @@ from scipy.optimize import (  # type: ignore[reportMissingTypeStubs]
     root_scalar,  # type: ignore[reportMissingTypeStubs]
 )
 
+from sulfur_simulation.scattering_calculation import JUMP_DIRECTIONS
+
 if TYPE_CHECKING:
     from collections.abc import Callable
 
@@ -39,19 +41,7 @@ class SquareHoppingCalculator(HoppingCalculator):
         energies = self._get_energy_landscape(positions=positions)
         rows, cols = np.nonzero(positions)
 
-        delta = np.array(
-            [
-                (-1, -1),
-                (-1, 0),
-                (-1, 1),
-                (0, -1),
-                (0, 0),
-                (0, 1),
-                (1, -1),
-                (1, 0),
-                (1, 1),
-            ]
-        )
+        delta = JUMP_DIRECTIONS
 
         neighbor_rows = (rows[:, None] + delta[:, 0]) % positions.shape[0]
         neighbor_cols = (cols[:, None] + delta[:, 1]) % positions.shape[1]
@@ -73,14 +63,22 @@ class SquareHoppingCalculator(HoppingCalculator):
         base_rates[4] = 0
 
         rates = np.exp(exponent) * base_rates
+        rates[:, 4] = 0
 
-        if np.sum(rates) > 1.0:
-            rates /= np.sum(rates)
+        row_sums = rates.sum(axis=1)
+       
+        over_rows = row_sums > 1.0
+        rates[over_rows] /= row_sums[over_rows, None]
+        
+        if np.any(row_sums > 0.5):
+            warnings.warn(
+                "Some probabilities exceed 0.5",
+                stacklevel=2,
+            )
+        
+        rates[:, 4] = 1 - rates.sum(axis=1)
 
-        if np.sum(rates) > 1.0:
-            rates /= np.sum(rates)
-
-        return rates
+        return np.clip(rates, 0.0, 1.0)
 
     def _get_energy_landscape(
         self, positions: np.ndarray[tuple[int, int], np.dtype[np.bool_]]
@@ -126,14 +124,11 @@ class InteractingHoppingCalculator(SquareHoppingCalculator):
         max_cutoff_radius = 6
 
         def _energy_difference(r: float) -> float:
-            # subtract potential at infinity
-            return (
-                abs(
-                    self._interaction(r)
-                    - self._interaction(1000 * self._lattice_spacing)
-                )
-                - self._cutoff_radius_potential
+            # subtract potential at infinity and the cutoff potential
+            abs_difference = abs(
+                self._interaction(r) - self._interaction(1000 * self._lattice_spacing)
             )
+            return abs_difference - self._cutoff_radius_potential
 
         cutoff_radius = _find_cutoff_radius(
             energy_difference=_energy_difference,
