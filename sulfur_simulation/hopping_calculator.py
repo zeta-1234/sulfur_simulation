@@ -42,15 +42,18 @@ class SquareHoppingCalculator(HoppingCalculator):
         rows, cols = np.nonzero(positions)
 
         delta = JUMP_DIRECTIONS
-
-        neighbor_rows = (rows[:, None] + delta[:, 0]) % positions.shape[0]
-        neighbor_cols = (cols[:, None] + delta[:, 1]) % positions.shape[1]
-        neighbor_energies = energies[neighbor_rows, neighbor_cols]
-        current_energies = energies[rows, cols][:, None]
-
-        max_exp_arg = np.log(1 / min(self._straight_baserate, self._diagonal_baserate))
         beta = 1 / (2 * Boltzmann * self._temperature)
-        energy_difference = neighbor_energies - current_energies
+        max_exp_arg = np.log(1 / min(self._straight_baserate, self._diagonal_baserate))
+
+        # Compute energy differences to neighbors
+        energy_difference = (
+            energies[
+                (rows[:, None] + delta[:, 0]) % positions.shape[0],
+                (cols[:, None] + delta[:, 1]) % positions.shape[1],
+            ]
+            - energies[rows, cols][:, None]
+        )
+
         exponent = np.clip(-beta * energy_difference, a_min=None, a_max=max_exp_arg)
         if np.any(np.isclose(exponent, max_exp_arg)):
             warnings.warn(
@@ -66,16 +69,14 @@ class SquareHoppingCalculator(HoppingCalculator):
         rates[:, 4] = 0
 
         row_sums = rates.sum(axis=1)
-       
         over_rows = row_sums > 1.0
         rates[over_rows] /= row_sums[over_rows, None]
-        
-        if np.any(row_sums > 0.5):
-            warnings.warn(
-                "Some probabilities exceed 0.5",
-                stacklevel=2,
-            )
-        
+
+        warning_threshold = 0.5
+        if np.any(row_sums > warning_threshold):
+            warnings.warn("Some probabilities exceed 0.5", stacklevel=2)
+
+        # Stationary probability
         rates[:, 4] = 1 - rates.sum(axis=1)
 
         return np.clip(rates, 0.0, 1.0)
