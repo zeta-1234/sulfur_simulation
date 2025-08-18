@@ -54,7 +54,9 @@ class ISFParameters:
         return _get_delta_k(delta_k_max=self.delta_k_max, params=self.params)
 
 
-def _get_autocorrelation(amplitudes: np.ndarray) -> np.ndarray[Any, np.dtype[np.complex128]]:
+def _get_autocorrelation(
+    amplitudes: np.ndarray,
+) -> np.ndarray[Any, np.dtype[np.complex128]]:
     """Compute the autocorrelation of a complex-valued 1D signal."""
     n = len(amplitudes)
     padded_length = 2 * n - 1

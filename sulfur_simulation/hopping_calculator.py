@@ -12,6 +12,8 @@ from scipy.optimize import (  # type: ignore[reportMissingTypeStubs]
     root_scalar,  # type: ignore[reportMissingTypeStubs]
 )
 
+from sulfur_simulation.scattering_calculation import JUMP_DIRECTIONS
+
 if TYPE_CHECKING:
     from collections.abc import Callable
 
@@ -27,8 +29,15 @@ class HoppingCalculator(ABC):
 class SquareHoppingCalculator(HoppingCalculator):
     """Class for calculating hopping probabilities in a square lattice."""
 
-    def __init__(self, baserate: float, temperature: float) -> None:
-        self._baserate = baserate
+    def __init__(
+        self,
+        *,
+        straight_baserate: float,
+        diagonal_baserate: float = 0,
+        temperature: float,
+    ) -> None:
+        self._straight_baserate = straight_baserate
+        self._diagonal_baserate = diagonal_baserate
         self._temperature = temperature
 
     @override
@@ -38,47 +47,45 @@ class SquareHoppingCalculator(HoppingCalculator):
         energies = self._get_energy_landscape(positions=positions)
         rows, cols = np.nonzero(positions)
 
-        delta = np.array(
-            [
-                (-1, -1),
-                (-1, 0),
-                (-1, 1),
-                (0, -1),
-                (0, 0),
-                (0, 1),
-                (1, -1),
-                (1, 0),
-                (1, 1),
+        delta = JUMP_DIRECTIONS
+        beta = 1 / (2 * Boltzmann * self._temperature)
+        max_exp_arg = np.log(1 / min(self._straight_baserate, self._diagonal_baserate))
+
+        # Compute energy differences to neighbors
+        energy_difference = (
+            energies[
+                (rows[:, None] + delta[:, 0]) % positions.shape[0],
+                (cols[:, None] + delta[:, 1]) % positions.shape[1],
             ]
+            - energies[rows, cols][:, None]
         )
 
-        neighbor_rows = (rows[:, None] + delta[:, 0]) % positions.shape[0]
-        neighbor_cols = (cols[:, None] + delta[:, 1]) % positions.shape[1]
-        np.ravel_multi_index((neighbor_rows, neighbor_cols), positions.shape)
-
-        neighbor_energies = energies[neighbor_rows, neighbor_cols]
-        current_energies = energies[rows, cols][:, None]
-
-        # Calculate the rate based on the boltzmann factor
-        # Limit exp argument to stop overflows
-        max_exp_arg = np.log(1 / (self._baserate))
-        beta = 1 / (2 * Boltzmann * self._temperature)
-        energy_difference = neighbor_energies - current_energies
         exponent = np.clip(-beta * energy_difference, a_min=None, a_max=max_exp_arg)
         if np.any(np.isclose(exponent, max_exp_arg)):
             warnings.warn(
                 "Some energy differences are too large, the resulting distribution may be inaccurate.",
                 stacklevel=2,
             )
-        rates = np.exp(exponent) * self._baserate
 
-        # Prevent self-jumps
+        base_rates = np.full(delta.shape[0], self._straight_baserate)
+        base_rates[[0, 2, 6, 8]] = self._diagonal_baserate
+        base_rates[4] = 0
+
+        rates = np.exp(exponent) * base_rates
         rates[:, 4] = 0
 
-        if np.sum(rates) > 1.0:
-            rates /= np.sum(rates)
+        row_sums = rates.sum(axis=1)
+        over_rows = row_sums > 1.0
+        rates[over_rows] /= row_sums[over_rows, None]
 
-        return rates
+        warning_threshold = 0.5
+        if np.any(row_sums > warning_threshold):
+            warnings.warn("Some probabilities exceed 0.5", stacklevel=2)
+
+        # Stationary probability
+        rates[:, 4] = 1 - rates.sum(axis=1)
+
+        return np.clip(rates, 0.0, 1.0)
 
     def _get_energy_landscape(
         self, positions: np.ndarray[tuple[int, int], np.dtype[np.bool_]]
@@ -104,34 +111,43 @@ class LineDefectHoppingCalculator(SquareHoppingCalculator):
 class InteractingHoppingCalculator(SquareHoppingCalculator):
     """Hopping Calculator with a Lennard Jones potential between particles."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
-        baserate: float,
+        *,
+        straight_baserate: float,
+        diagonal_baserate: float = 0,
         temperature: float,
         lattice_spacing: float,
         interaction: Callable[[float], float],
-        cutoff_radius_potential: float = 1.6e-22,
+        cutoff_potential: float = 1.6e-22,
     ) -> None:
-        super().__init__(baserate, temperature)
+        super().__init__(
+            straight_baserate=straight_baserate,
+            diagonal_baserate=diagonal_baserate,
+            temperature=temperature,
+        )
 
         self._lattice_spacing = lattice_spacing
         self._interaction = interaction
-        self._cutoff_radius_potential = cutoff_radius_potential
+        self.cutoff_potential = cutoff_potential
 
     @cached_property
-    def _potential_table(
-        self
-    ) -> dict[tuple[int, int], float]:
+    def _potential_table(self) -> dict[tuple[int, int], float]:
         """Create lookup table for interactin potential values."""
         max_cutoff_radius = 6
 
         def _energy_difference(r: float) -> float:
-            # subtract potential at infinity
-            return abs(self._interaction(r) - self._interaction(1000 * self._lattice_spacing)) - self._cutoff_radius_potential
+            # subtract potential at infinity and the cutoff potential
+            abs_difference = abs(
+                self._interaction(r) - self._interaction(1000 * self._lattice_spacing)
+            )
+            return abs_difference - self.cutoff_potential
 
-        cutoff_radius = _find_cutoff_radius(energy_difference=_energy_difference,
-                                            r_max=max_cutoff_radius * self._lattice_spacing,
-                                            r_min=self._lattice_spacing)
+        cutoff_radius = _find_cutoff_radius(
+            energy_difference=_energy_difference,
+            r_max=max_cutoff_radius * self._lattice_spacing,
+            r_min=self._lattice_spacing,
+        )
 
         cutoff_radius = int(np.ceil(cutoff_radius / self._lattice_spacing))
 
@@ -166,10 +182,11 @@ class InteractingHoppingCalculator(SquareHoppingCalculator):
         return energies
 
 
-def get_lennard_jones_potential(sigma: float,
-                                epsilon: float,
-                                cutoff_energy: float = 1.9e-20,
-                                ) -> Callable[[float], float]:
+def get_lennard_jones_potential(
+    sigma: float,
+    epsilon: float,
+    cutoff_energy: float = 1.9e-20,
+) -> Callable[[float], float]:
     """
     Take float and return Lennard Jones potential.
 
@@ -182,7 +199,7 @@ def get_lennard_jones_potential(sigma: float,
 
     def _potential(r: float) -> float:
         sr6 = (sigma / r) ** 6
-        sr12 = sr6 ** 2
+        sr12 = sr6**2
         return np.clip(4 * epsilon * (sr12 - sr6), a_min=None, a_max=cutoff_energy)
 
     return _potential
@@ -192,7 +209,7 @@ def _find_cutoff_radius(
     energy_difference: Callable[[float], float],
     r_max: float,
     r_min: float,
-    num_points: int = 1000
+    num_points: int = 1000,
 ) -> float:
     """
     Find the largest root of `energy_difference(r)` by scanning inward from r_max.
@@ -215,11 +232,12 @@ def _find_cutoff_radius(
             bracket_b = r_values[i]
 
             # Find root in bracket using Brent's method
-            solution = cast("RootResults", root_scalar(
-                energy_difference,
-                bracket=[bracket_a, bracket_b],
-                method="brentq"
-            ))
+            solution = cast(
+                "RootResults",
+                root_scalar(
+                    energy_difference, bracket=[bracket_a, bracket_b], method="brentq"
+                ),
+            )
 
             if solution.converged:
                 return solution.root

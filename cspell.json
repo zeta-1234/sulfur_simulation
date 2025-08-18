@@ -23,12 +23,16 @@
         "blit",
         "xlim",
         "ylim",
+        "xticks",
+        "yticks",
         "tqdm",
         "trange",
         "timesteps",
         "ifft",
         "brentq",
-        "waals"
+        "waals",
+        "zorder",
+        "xticklabels"
     ],
     "flagWords": [
         "hte",

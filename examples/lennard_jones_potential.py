@@ -21,27 +21,28 @@ from sulfur_simulation.scattering_calculation import (
     run_simulation,
 )
 from sulfur_simulation.show_simulation import (
-    animate_particle_positions,
+    animate_particle_positions_skewed,
+    animate_particle_positions_square,
+    plot_jump_rates,
 )
 
 if __name__ == "__main__":
     params = SimulationParameters(
-        n_timesteps=12000,
+        n_timesteps=3000,
         lattice_dimension=(100, 100),
         n_particles=500,
         hopping_calculator=InteractingHoppingCalculator(
-            baserate=0.01,
+            straight_baserate=0.01,
+            diagonal_baserate=0.01 / 5,
             temperature=200,
             lattice_spacing=2.5,
-            interaction=get_lennard_jones_potential(
-                sigma=2.55,
-                epsilon=0.03 * 1.6e-19,
-            )
-    ))
+            interaction=get_lennard_jones_potential(sigma=2.55, epsilon=0.03 * 1.6e-19),
+        ),
+    )
 
-    positions = run_simulation(params=params)
+    result = run_simulation(params=params, rng_seed=1)
     isf_params = ISFParameters(params=params)
-    amplitudes = get_amplitudes(isf_params=isf_params, positions=positions)
+    amplitudes = get_amplitudes(isf_params=isf_params, positions=result.positions)
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
 
@@ -57,13 +58,24 @@ if __name__ == "__main__":
         ax=ax2,
     )
 
-    timesteps = np.arange(1, 12000)[::20]
+    timesteps = np.arange(1, 3000)[::20].astype(np.float64)
 
-    anim = animate_particle_positions(
-        all_positions=positions,
+    anim = animate_particle_positions_square(
+        all_positions=result.positions,
         lattice_dimension=params.lattice_dimension,
         timesteps=timesteps,
         lattice_spacing=2.5,
     )
 
+    anim2 = animate_particle_positions_skewed(
+        all_positions=result.positions,
+        lattice_dimension=params.lattice_dimension,
+        timesteps=timesteps,
+        dx_dy=(2.5, 2.5 * np.sqrt(3) / 2),
+    )
+
+    jump_count = plot_jump_rates(
+        jump_counter=result.jump_counter,
+        sampled_jumps=result.attempted_jump_counter,
+    )
     plt.show()
