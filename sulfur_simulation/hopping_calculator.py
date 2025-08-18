@@ -29,9 +29,15 @@ class HoppingCalculator(ABC):
 class SquareHoppingCalculator(HoppingCalculator):
     """Class for calculating hopping probabilities in a square lattice."""
 
-    def __init__(self, baserate: tuple[float, float], temperature: float) -> None:
-        self._straight_baserate = baserate[0]
-        self._diagonal_baserate = baserate[1]
+    def __init__(
+        self,
+        *,
+        straight_baserate: float,
+        diagonal_baserate: float = 0,
+        temperature: float,
+    ) -> None:
+        self._straight_baserate = straight_baserate
+        self._diagonal_baserate = diagonal_baserate
         self._temperature = temperature
 
     @override
@@ -105,19 +111,25 @@ class LineDefectHoppingCalculator(SquareHoppingCalculator):
 class InteractingHoppingCalculator(SquareHoppingCalculator):
     """Hopping Calculator with a Lennard Jones potential between particles."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
-        baserate: tuple[float, float],
+        *,
+        straight_baserate: float,
+        diagonal_baserate: float = 0,
         temperature: float,
         lattice_spacing: float,
         interaction: Callable[[float], float],
-        cutoff_radius_potential: float = 1.6e-22,
+        cutoff_potential: float = 1.6e-22,
     ) -> None:
-        super().__init__(baserate, temperature)
+        super().__init__(
+            straight_baserate=straight_baserate,
+            diagonal_baserate=diagonal_baserate,
+            temperature=temperature,
+        )
 
         self._lattice_spacing = lattice_spacing
         self._interaction = interaction
-        self._cutoff_radius_potential = cutoff_radius_potential
+        self.cutoff_potential = cutoff_potential
 
     @cached_property
     def _potential_table(self) -> dict[tuple[int, int], float]:
@@ -129,7 +141,7 @@ class InteractingHoppingCalculator(SquareHoppingCalculator):
             abs_difference = abs(
                 self._interaction(r) - self._interaction(1000 * self._lattice_spacing)
             )
-            return abs_difference - self._cutoff_radius_potential
+            return abs_difference - self.cutoff_potential
 
         cutoff_radius = _find_cutoff_radius(
             energy_difference=_energy_difference,

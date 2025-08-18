@@ -72,9 +72,9 @@ def animate_particle_positions_square(
 
 
 def animate_particle_positions_skewed(
-    all_positions: np.ndarray,  # shape (timesteps, rows, cols), dtype=bool
+    all_positions: np.ndarray[tuple[int, int, int], np.dtype[np.bool_]],
     lattice_dimension: tuple[int, int],
-    timesteps: np.ndarray,
+    timesteps: np.ndarray[tuple[int], np.dtype[np.float64]],
     dx_dy: tuple[float, float],
 ) -> animation.FuncAnimation:
     """Animate particle positions on a hexagonal close-packed (HCP) lattice."""

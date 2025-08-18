@@ -32,16 +32,17 @@ if __name__ == "__main__":
         lattice_dimension=(100, 100),
         n_particles=500,
         hopping_calculator=InteractingHoppingCalculator(
-            baserate=(0.01, 0.01 / 5),
+            straight_baserate=0.01,
+            diagonal_baserate=0.01 / 5,
             temperature=200,
             lattice_spacing=2.5,
             interaction=get_lennard_jones_potential(sigma=2.55, epsilon=0.03 * 1.6e-19),
         ),
     )
 
-    positions = run_simulation(params=params, rng_seed=1)
+    result = run_simulation(params=params, rng_seed=1)
     isf_params = ISFParameters(params=params)
-    amplitudes = get_amplitudes(isf_params=isf_params, positions=positions)
+    amplitudes = get_amplitudes(isf_params=isf_params, positions=result.positions)
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
 
@@ -60,21 +61,21 @@ if __name__ == "__main__":
     timesteps = np.arange(1, 3000)[::20]
 
     anim = animate_particle_positions_square(
-        all_positions=positions,
+        all_positions=result.positions,
         lattice_dimension=params.lattice_dimension,
         timesteps=timesteps,
         lattice_spacing=2.5,
     )
 
     anim2 = animate_particle_positions_skewed(
-        all_positions=positions,
+        all_positions=result.positions,
         lattice_dimension=params.lattice_dimension,
         timesteps=timesteps,
         dx_dy=(2.5, 2.5 * np.sqrt(3) / 2),
     )
 
     jump_count = plot_jump_rates(
-        jump_counter=params.results.jump_counter,
-        sampled_jumps=params.results.attempted_jump_counter,
+        jump_counter=result.jump_counter,
+        sampled_jumps=result.attempted_jump_counter,
     )
     plt.show()
