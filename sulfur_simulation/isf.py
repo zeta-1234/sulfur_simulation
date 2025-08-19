@@ -72,11 +72,12 @@ def _gaussian_decay_function(
     x: np.ndarray[Any, np.dtype[np.float64]], a: float, b: float, c: float
 ) -> np.ndarray[Any, np.dtype[np.float64]]:
     """Return a generic exponential function."""
-    return a * np.exp(b * x) + c - 1000 * min(c, 0)
+    # return a * np.exp(b * x) + c - 1000 * min(c, 0)
+    return a * np.exp(b * x) + c
 
 
 def plot_isf(
-    x: np.ndarray[tuple[int, int], np.dtype[np.complex128]],
+    x: np.ndarray[tuple[int, int, int], np.dtype[np.complex128]],
     isf_params: ISFParameters,
     delta_k_index: int,
     t: np.ndarray,
@@ -84,11 +85,31 @@ def plot_isf(
     ax: Axes | None = None,
 ) -> tuple[Figure | SubFigure, Axes]:
     """Plot autocorrelation data with an exponential curve fit on a given axis."""
-    fig, ax = get_figure(ax=ax)
-    autocorrelation = _get_autocorrelation(x[delta_k_index])
-    optimal_params = _fit_gaussian_decay(t=t, autocorrelation=autocorrelation)
+    mean_amplitudes = x.mean(axis=0)
+    std_amplitudes = x.std(axis=0)
 
-    ax.plot(t, autocorrelation, label="data_real")
+    fig, ax = get_figure(ax=ax)
+    autocorrelation_mean = _get_autocorrelation(mean_amplitudes[delta_k_index])
+    autocorrelation_std = _get_autocorrelation(std_amplitudes[delta_k_index])
+
+    optimal_params = _fit_gaussian_decay(t=t, autocorrelation=autocorrelation_mean)
+    lower_params = _fit_gaussian_decay(
+        t=t, autocorrelation=autocorrelation_mean - autocorrelation_std
+    )
+    upper_params = _fit_gaussian_decay(
+        t=t, autocorrelation=autocorrelation_mean + autocorrelation_std
+    )
+
+    ax.plot(t, autocorrelation_mean, label="Mean ISF")
+    ax.fill_between(
+        t,
+        _gaussian_decay_function(t, *lower_params),
+        _gaussian_decay_function(t, *upper_params),
+        color="gray",
+        alpha=0.3,
+        label="±1 std",
+    )
+
     ax.plot(t, _gaussian_decay_function(t, *optimal_params), "r-", label="Fitted Curve")
     ax.legend()
     ax.set_title(f"ISF of A for delta_k = {isf_params.delta_k_array[delta_k_index]}")

@@ -28,7 +28,7 @@ from sulfur_simulation.show_simulation import (
 
 if __name__ == "__main__":
     params = SimulationParameters(
-        n_timesteps=3000,
+        n_timesteps=12000,
         lattice_dimension=(100, 100),
         n_particles=500,
         hopping_calculator=InteractingHoppingCalculator(
@@ -40,17 +40,33 @@ if __name__ == "__main__":
         ),
     )
 
-    result = run_simulation(params=params, rng_seed=1)
+    n_runs = 5
+
+    results = np.empty(
+        (n_runs, params.n_timesteps, *params.lattice_dimension), dtype=bool
+    )
+
+    for i in range(n_runs):
+        results[i] = run_simulation(params, rng_seed=i)
+
     isf_params = ISFParameters(params=params)
-    amplitudes = get_amplitudes(isf_params=isf_params, positions=result.positions)
+
+    all_amplitudes = [get_amplitudes(isf_params, positions=pos) for pos in results]
+    all_amplitudes = np.array(all_amplitudes)
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
 
     plot_isf(
-        x=amplitudes, t=params.times, ax=ax1, delta_k_index=50, isf_params=isf_params
+        x=all_amplitudes,
+        t=params.times,
+        ax=ax1,
+        delta_k_index=50,
+        isf_params=isf_params,
     )
 
-    dephasing_rates = get_dephasing_rates(amplitudes=amplitudes, t=params.times)
+    dephasing_rates = get_dephasing_rates(
+        amplitudes=all_amplitudes.mean(axis=0), t=params.times
+    )
 
     plot_dephasing_rates(
         dephasing_rates=dephasing_rates,
@@ -61,14 +77,14 @@ if __name__ == "__main__":
     timesteps = np.arange(1, 3000)[::20].astype(np.float64)
 
     anim = animate_particle_positions_square(
-        all_positions=result.positions,
+        all_positions=results[0],
         lattice_dimension=params.lattice_dimension,
         timesteps=timesteps,
         lattice_spacing=2.5,
     )
 
     anim2 = animate_particle_positions_skewed(
-        all_positions=result.positions,
+        all_positions=results[0],
         lattice_dimension=params.lattice_dimension,
         timesteps=timesteps,
         dx_dy=(2.5, 2.5 * np.sqrt(3) / 2),
