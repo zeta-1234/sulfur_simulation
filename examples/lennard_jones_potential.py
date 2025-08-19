@@ -11,19 +11,19 @@ from sulfur_simulation.hopping_calculator import (
 )
 from sulfur_simulation.isf import (
     ISFParameters,
-    get_amplitudes,
     get_dephasing_rates,
+    get_multiple_amplitudes,
     plot_dephasing_rates,
     plot_isf,
 )
 from sulfur_simulation.scattering_calculation import (
     SimulationParameters,
-    run_simulation,
+    run_multiple_simulations,
 )
 from sulfur_simulation.show_simulation import (
     animate_particle_positions_skewed,
     animate_particle_positions_square,
-    plot_jump_rates,
+    plot_mean_jump_rates,
 )
 
 if __name__ == "__main__":
@@ -40,58 +40,46 @@ if __name__ == "__main__":
         ),
     )
 
-    n_runs = 5
-
-    results = np.empty(
-        (n_runs, params.n_timesteps, *params.lattice_dimension), dtype=bool
-    )
-
-    for i in range(n_runs):
-        results[i] = run_simulation(params, rng_seed=i)
+    results = run_multiple_simulations(n_runs=5, params=params)
 
     isf_params = ISFParameters(params=params)
 
-    all_amplitudes = [get_amplitudes(isf_params, positions=pos) for pos in results]
-    all_amplitudes = np.array(all_amplitudes)
+    all_amplitudes = get_multiple_amplitudes(isf_params=isf_params, results=results)
 
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
 
     plot_isf(
         x=all_amplitudes,
         t=params.times,
-        ax=ax1,
+        ax=axes[0],
         delta_k_index=50,
         isf_params=isf_params,
     )
 
-    dephasing_rates = get_dephasing_rates(
-        amplitudes=all_amplitudes.mean(axis=0), t=params.times
-    )
+    dephasing_rates = get_dephasing_rates(amplitudes=all_amplitudes, t=params.times)
 
     plot_dephasing_rates(
         dephasing_rates=dephasing_rates,
         delta_k=isf_params.delta_k_array[:, 0],
-        ax=ax2,
+        ax=axes[1],
     )
 
-    timesteps = np.arange(1, 3000)[::20].astype(np.float64)
+    plot_mean_jump_rates(results=results, ax=axes[2])
 
-    anim = animate_particle_positions_square(
-        all_positions=results[0],
+    timesteps = np.arange(1, 12000, 20, dtype=int)
+
+    anim1 = animate_particle_positions_square(
+        all_positions=results[0].positions,
         lattice_dimension=params.lattice_dimension,
         timesteps=timesteps,
         lattice_spacing=2.5,
     )
 
     anim2 = animate_particle_positions_skewed(
-        all_positions=results[0],
+        all_positions=results[0].positions,
         lattice_dimension=params.lattice_dimension,
         timesteps=timesteps,
         dx_dy=(2.5, 2.5 * np.sqrt(3) / 2),
     )
 
-    jump_count = plot_jump_rates(
-        jump_counter=result.jump_counter,
-        sampled_jumps=result.attempted_jump_counter,
-    )
     plt.show()

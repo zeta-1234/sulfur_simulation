@@ -169,3 +169,10 @@ def run_simulation(params: SimulationParameters, rng_seed: int) -> SimulationRes
         )
 
     return out
+
+
+def run_multiple_simulations(
+    n_runs: int, params: SimulationParameters
+) -> list[SimulationResult]:
+    """Run multiple simulations and return the results as a list."""
+    return [run_simulation(params=params, rng_seed=i) for i in range(n_runs)]
