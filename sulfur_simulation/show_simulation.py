@@ -6,11 +6,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib import animation
 
-from sulfur_simulation.scattering_calculation import JUMP_DIRECTIONS
+from sulfur_simulation.scattering_calculation import JUMP_DIRECTIONS, SimulationResult
+from sulfur_simulation.util import get_figure
 
 if TYPE_CHECKING:
+    from matplotlib.axes import Axes
     from matplotlib.collections import PathCollection
-    from matplotlib.figure import Figure
+    from matplotlib.figure import Figure, SubFigure
 
     from sulfur_simulation.scattering_calculation import SimulationParameters
 
@@ -78,10 +80,20 @@ def animate_particle_positions_skewed(
     dx_dy: tuple[float, float],
 ) -> animation.FuncAnimation:
     """Animate particle positions on a hexagonal close-packed (HCP) lattice."""
-    fig, ax = plt.subplots(figsize=(6, 6))
-
     dx = dx_dy[0]
     dy = dx_dy[1]
+
+    lattice_width = lattice_dimension[0] * dx + (lattice_dimension[1] - 1) * (dx / 2)
+    lattice_height = lattice_dimension[1] * dy
+
+    base_size = 6
+
+    fig, ax = plt.subplots(
+        figsize=(base_size * lattice_width / lattice_height, base_size)
+    )
+
+    lattice_x = np.zeros(lattice_dimension[0] * lattice_dimension[1])
+    lattice_y = np.zeros_like(lattice_x)
 
     lattice_x = np.zeros(lattice_dimension[0] * lattice_dimension[1])
     lattice_y = np.zeros_like(lattice_x)
@@ -96,6 +108,7 @@ def animate_particle_positions_skewed(
     ax.set_xlim(lattice_x.min() - dx, lattice_x.max() + dx)
     ax.set_ylim(lattice_y.min() - dy, lattice_y.max() + dy)
     ax.set_aspect("equal")
+    ax.set_title("Particle Simulation")
 
     ax.set_xticks([])
     ax.set_yticks([])
@@ -155,17 +168,27 @@ def get_timeframe_str(
     return "\n".join(lines)
 
 
-def plot_jump_rates(jump_counter: np.ndarray, sampled_jumps: np.ndarray) -> Figure:
+def plot_mean_jump_rates(
+    results: list[SimulationResult], ax: Axes | None = None
+) -> tuple[Figure | SubFigure, Axes]:
     """Plot attempted and successful jump counts."""
+    jump_counter = np.array([result.jump_counter for result in results])
+    mean_jump_counter = jump_counter.mean(axis=0)
+
+    attempted_jump_counter = np.array(
+        [result.attempted_jump_counter for result in results]
+    )
+    mean_attempted_jump_counter = attempted_jump_counter.mean(axis=0)
     delta = JUMP_DIRECTIONS
     labels = [f"{d}" for d in delta]
 
-    indices = np.arange(len(jump_counter))
+    indices = np.arange(len(mean_jump_counter))
     width = 0.35
-
-    fig, ax = plt.subplots()
-    ax.bar(indices - width / 2, jump_counter, width, label="Successful jumps")
-    ax.bar(indices + width / 2, sampled_jumps, width, label="Attempted jumps")
+    fig, ax = get_figure(ax=ax)
+    ax.bar(indices - width / 2, mean_jump_counter, width, label="Successful jumps")
+    ax.bar(
+        indices + width / 2, mean_attempted_jump_counter, width, label="Attempted jumps"
+    )
     ax.set_xlabel("Direction (delta row, delta col)")
     ax.set_ylabel("Count")
     ax.set_xticks(indices)
@@ -176,4 +199,4 @@ def plot_jump_rates(jump_counter: np.ndarray, sampled_jumps: np.ndarray) -> Figu
             label.set_color("gray")
 
     ax.legend()
-    return fig
+    return fig, ax

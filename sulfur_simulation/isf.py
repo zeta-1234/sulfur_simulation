@@ -15,7 +15,10 @@ if TYPE_CHECKING:
     from matplotlib.figure import Figure, SubFigure
     from numpy.typing import NDArray
 
-    from sulfur_simulation.scattering_calculation import SimulationParameters
+    from sulfur_simulation.scattering_calculation import (
+        SimulationParameters,
+        SimulationResult,
+    )
 
 
 def _get_delta_k(
@@ -72,12 +75,11 @@ def _gaussian_decay_function(
     x: np.ndarray[Any, np.dtype[np.float64]], a: float, b: float, c: float
 ) -> np.ndarray[Any, np.dtype[np.float64]]:
     """Return a generic exponential function."""
-    # return a * np.exp(b * x) + c - 1000 * min(c, 0)
     return a * np.exp(b * x) + c
 
 
 def plot_isf(
-    x: np.ndarray[tuple[int, int, int], np.dtype[np.complex128]],
+    x: list[np.ndarray[tuple[int, int], np.dtype[np.complex128]]],
     isf_params: ISFParameters,
     delta_k_index: int,
     t: np.ndarray,
@@ -85,8 +87,9 @@ def plot_isf(
     ax: Axes | None = None,
 ) -> tuple[Figure | SubFigure, Axes]:
     """Plot autocorrelation data with an exponential curve fit on a given axis."""
-    mean_amplitudes = x.mean(axis=0)
-    std_amplitudes = x.std(axis=0)
+    all_results = np.array(x)
+    mean_amplitudes = all_results.mean(axis=0)
+    std_amplitudes = all_results.std(axis=0)
 
     fig, ax = get_figure(ax=ax)
     autocorrelation_mean = _get_autocorrelation(mean_amplitudes[delta_k_index])
@@ -145,11 +148,16 @@ def _fit_gaussian_decay(
     return cast("NDArray[np.float64]", optimal_params)
 
 
-def get_dephasing_rates(amplitudes: np.ndarray, t: np.ndarray) -> np.ndarray:
+def get_dephasing_rates(
+    amplitudes: list[np.ndarray[tuple[int, int], np.dtype[np.complex128]]],
+    t: np.ndarray,
+) -> np.ndarray:
     """Calculate dephasing rates for all amplitudes."""
-    dephasing_rates = np.empty(len(amplitudes))
-    for i in trange(len(amplitudes)):
-        autocorrelation = _get_autocorrelation(amplitudes[i])
+    all_amplitudes = np.array(amplitudes)
+    mean_amplitudes = all_amplitudes.mean(axis=0)
+    dephasing_rates = np.empty(len(mean_amplitudes))
+    for i in trange(len(mean_amplitudes)):
+        autocorrelation = _get_autocorrelation(mean_amplitudes[i])
         optimal_params = _fit_gaussian_decay(t=t, autocorrelation=autocorrelation)
         dephasing_rates[i] = optimal_params[1] * -1
     return dephasing_rates
@@ -193,3 +201,11 @@ def get_amplitudes(
         amplitudes[:, t] = np.sum(amp, axis=0)
 
     return amplitudes
+
+
+def get_multiple_amplitudes(
+    isf_params: ISFParameters,
+    results: list[SimulationResult],
+) -> list[np.ndarray[tuple[int, int], np.dtype[np.complex128]]]:
+    """Get amplitudes for all runs and return as a list."""
+    return [get_amplitudes(isf_params, positions=run.positions) for run in results]
