@@ -5,7 +5,6 @@ from __future__ import annotations
 import matplotlib.pyplot as plt
 import numpy as np
 
-from sulfur_simulation.hopping_calculator import SquareHoppingCalculator
 from sulfur_simulation.isf import (
     ISFParameters,
     get_dephasing_rates,
@@ -20,6 +19,7 @@ from sulfur_simulation.scattering_calculation import (
 from sulfur_simulation.show_simulation import (
     animate_particle_positions_square,
 )
+from sulfur_simulation.square_hopping_calculator import SquareHoppingCalculator
 
 if __name__ == "__main__":
     params = SimulationParameters(
