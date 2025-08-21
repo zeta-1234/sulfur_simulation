@@ -5,6 +5,10 @@ from __future__ import annotations
 import matplotlib.pyplot as plt
 import numpy as np
 
+from sulfur_simulation.hopping_calculator import (
+    BaseRateHoppingCalculator,
+    SquareBaseRate,
+)
 from sulfur_simulation.isf import (
     ISFParameters,
     get_dephasing_rates,
@@ -18,22 +22,21 @@ from sulfur_simulation.scattering_calculation import (
 )
 from sulfur_simulation.show_simulation import (
     animate_particle_positions_square,
+    plot_mean_jump_rates,
 )
-from sulfur_simulation.square_hopping_calculator import SquareHoppingCalculator
 
 if __name__ == "__main__":
     params = SimulationParameters(
-        n_timesteps=12000,
+        n_timesteps=1000,
         lattice_dimension=(100, 100),
         n_particles=500,
-        hopping_calculator=SquareHoppingCalculator(
-            straight_baserate=0.01,
-            diagonal_baserate=0.01 / 5,
+        hopping_calculator=BaseRateHoppingCalculator(
+            baserate=SquareBaseRate(straight_rate=0.01, diagonal_rate=0.01 / 5),
             temperature=200,
         ),
     )
 
-    results = run_multiple_simulations(n_runs=5, params=params)
+    results = run_multiple_simulations(n_runs=3, params=params)
 
     isf_params = ISFParameters(params=params)
 
@@ -57,7 +60,9 @@ if __name__ == "__main__":
         ax=axes[1],
     )
 
-    timesteps = np.arange(1, 12000, 20, dtype=int)
+    plot_mean_jump_rates(results=results, ax=axes[2])
+
+    timesteps = np.arange(1, params.n_timesteps, 20, dtype=int)
 
     anim = animate_particle_positions_square(
         all_positions=results[0].positions,

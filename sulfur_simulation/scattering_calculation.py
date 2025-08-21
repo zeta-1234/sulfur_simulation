@@ -7,8 +7,8 @@ import numpy as np
 from tqdm import trange
 
 if TYPE_CHECKING:
+    from hopping_calculator import HoppingCalculator
     from numpy.random import Generator
-    from square_hopping_calculator import HoppingCalculator
 
 JUMP_DIRECTIONS = np.array(
     [
