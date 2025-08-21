@@ -24,7 +24,7 @@ class BaseRate(ABC):
 
     @property
     @abstractmethod
-    def grid(self) -> np.ndarray[tuple[int], np.dtype[np.floating]]:
+    def grid(self) -> np.ndarray[tuple[int, int], np.dtype[np.floating]]:
         """Generate grid of baserates."""
         ...
 
@@ -49,7 +49,7 @@ class SquareBaseRate(BaseRate):
 
     @property
     @override
-    def grid(self) -> np.ndarray[tuple[int], np.dtype[np.floating]]:
+    def grid(self) -> np.ndarray[tuple[int, int], np.dtype[np.floating]]:
         return np.array(
             [
                 self.diagonal_rate,
@@ -91,7 +91,7 @@ class HexagonalBaseRate(BaseRate):
 
     @property
     @override
-    def grid(self) -> np.ndarray[tuple[int], np.dtype[np.floating]]:
+    def grid(self) -> np.ndarray[tuple[int, int], np.dtype[np.floating]]:
         return np.array(
             [
                 0,
@@ -150,7 +150,6 @@ class BaseRateHoppingCalculator(HoppingCalculator):
     ) -> None:
         self._baserate = baserate
         self._temperature = temperature
-        self._baserate_grid = baserate.grid
 
     @override
     def get_hopping_probabilities(
@@ -162,8 +161,7 @@ class BaseRateHoppingCalculator(HoppingCalculator):
         delta = JUMP_DIRECTIONS
         beta = 1 / (2 * Boltzmann * self._temperature)
         # take smallest baserate and use it to define a maximum valid exp argument
-        positive_values = [float(x) for x in self._baserate_grid if x > 0]
-        max_exp_arg = np.log(1 / min(positive_values))
+        max_exp_arg = np.log(1 / np.min(self._baserate.grid[self._baserate.grid > 0]))
 
         # Compute energy differences to neighbors
         energy_difference = (
@@ -181,7 +179,7 @@ class BaseRateHoppingCalculator(HoppingCalculator):
                 stacklevel=2,
             )
 
-        rates = np.exp(exponent) * self._baserate_grid
+        rates = np.exp(exponent) * self._baserate.grid
 
         row_sums = rates.sum(axis=1)
         over_rows = row_sums > 1.0
@@ -347,3 +345,6 @@ def _find_cutoff_radius(
         return 0
     msg = "No root found in the given range."
     raise ValueError(msg)
+
+
+# TODO: Currently bad because LJ lookup table is generated in BaseRate class. Better way to do it would be to pass two vectors that define the lattice in 2D space, and be able to calculate any LJ potentials using those two vectors. That way the lookup table calculator can be outside of BaseRate but still work in the general case.
