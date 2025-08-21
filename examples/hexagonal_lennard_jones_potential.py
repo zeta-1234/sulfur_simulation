@@ -35,7 +35,7 @@ if __name__ == "__main__":
             baserate=HexagonalBaseRate(rate=0.01),
             temperature=200,
             lattice_spacing=2.5,
-            interaction=get_lennard_jones_potential(sigma=2.55, epsilon=0.03 * 1.6e-19),
+            interaction=get_lennard_jones_potential(sigma=2.45, epsilon=0.03 * 1.6e-19),
         ),
     )
 

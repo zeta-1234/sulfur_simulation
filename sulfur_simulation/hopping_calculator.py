@@ -28,6 +28,15 @@ class BaseRate(ABC):
         """Generate grid of baserates."""
         ...
 
+    @abstractmethod
+    def build_lj_lookup_table(
+        self,
+        cutoff_radius: int,
+        lattice_spacing: float,
+        interaction: Callable[[float], float],
+    ) -> dict[tuple[int, int], float]:
+        """Build lookup table for lennard jones potentials."""
+
 
 @dataclass(kw_only=True, frozen=True)
 class SquareBaseRate(BaseRate):
@@ -55,6 +64,24 @@ class SquareBaseRate(BaseRate):
             ]
         )
 
+    @override
+    def build_lj_lookup_table(
+        self,
+        cutoff_radius: int,
+        lattice_spacing: float,
+        interaction: Callable[[float], float],
+    ) -> dict[tuple[int, int], float]:
+        lookup: dict[tuple[int, int], float] = {}
+
+        for dx in range(-cutoff_radius, cutoff_radius + 1):
+            for dy in range(-cutoff_radius, cutoff_radius + 1):
+                if dx == 0 and dy == 0:
+                    continue
+                r = lattice_spacing * np.sqrt(dx**2 + dy**2)
+                if r <= cutoff_radius * lattice_spacing:
+                    lookup[dx, dy] = interaction(r)
+        return lookup
+
 
 @dataclass(kw_only=True, frozen=True)
 class HexagonalBaseRate(BaseRate):
@@ -78,6 +105,30 @@ class HexagonalBaseRate(BaseRate):
                 0,
             ]
         )
+
+    @override
+    def build_lj_lookup_table(
+        self,
+        cutoff_radius: int,
+        lattice_spacing: float,
+        interaction: Callable[[float], float],
+    ) -> dict[tuple[int, int], float]:
+        lookup: dict[tuple[int, int], float] = {}
+
+        for dx in range(-cutoff_radius, cutoff_radius + 1):
+            for dy in range(
+                -int(np.ceil(cutoff_radius * 2 / np.sqrt(3))),
+                int(np.ceil(cutoff_radius * 2 / np.sqrt(3))) + 1,
+            ):
+                if dx == 0 and dy == 0:
+                    continue
+                r = lattice_spacing * np.sqrt(
+                    (dx + dy / 2) ** 2 + (dy * np.sqrt(3) / 2) ** 2
+                )
+                if r <= cutoff_radius * lattice_spacing:
+                    lookup[dx, dy] = interaction(r)
+
+        return lookup
 
 
 class HoppingCalculator(ABC):
@@ -188,7 +239,7 @@ class InteractingHoppingCalculator(BaseRateHoppingCalculator):
         self.cutoff_potential = cutoff_potential
 
     @cached_property
-    def _potential_table(self) -> dict[tuple[int, int], float]:  # noqa: C901
+    def _potential_table(self) -> dict[tuple[int, int], float]:
         """Create lookup table for interaction potential values."""
         max_cutoff_radius = 6
 
@@ -206,32 +257,12 @@ class InteractingHoppingCalculator(BaseRateHoppingCalculator):
         )
 
         cutoff_radius = int(np.ceil(cutoff_radius / self._lattice_spacing))
-        lookup: dict[tuple[int, int], float] = {}
 
-        if type(self._baserate) is SquareBaseRate:
-            for dx in range(-cutoff_radius, cutoff_radius + 1):
-                for dy in range(-cutoff_radius, cutoff_radius + 1):
-                    if dx == 0 and dy == 0:
-                        continue
-                    r = self._lattice_spacing * np.sqrt(dx**2 + dy**2)
-                    if r <= cutoff_radius * self._lattice_spacing:
-                        lookup[dx, dy] = self._interaction(r)
-
-        elif type(self._baserate) is HexagonalBaseRate:
-            for dx in range(-cutoff_radius, cutoff_radius + 1):
-                for dy in range(
-                    -int(np.ceil(cutoff_radius * 2 / np.sqrt(3))),
-                    int(np.ceil(cutoff_radius * 2 / np.sqrt(3))) + 1,
-                ):
-                    if dx == 0 and dy == 0:
-                        continue
-                    r = self._lattice_spacing * np.sqrt(
-                        (dx + dy / 2) ** 2 + (dy * np.sqrt(3) / 2) ** 2
-                    )
-                    if r <= cutoff_radius * self._lattice_spacing:
-                        lookup[dx, dy] = self._interaction(r)
-
-        return lookup
+        return self._baserate.build_lj_lookup_table(
+            cutoff_radius=cutoff_radius,
+            lattice_spacing=self._lattice_spacing,
+            interaction=self._interaction,
+        )
 
     @override
     def _get_energy_landscape(
