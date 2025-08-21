@@ -95,9 +95,6 @@ def animate_particle_positions_skewed(
     lattice_x = np.zeros(lattice_dimension[0] * lattice_dimension[1])
     lattice_y = np.zeros_like(lattice_x)
 
-    lattice_x = np.zeros(lattice_dimension[0] * lattice_dimension[1])
-    lattice_y = np.zeros_like(lattice_x)
-
     index = 0
     for row in range(lattice_dimension[1]):
         for col in range(lattice_dimension[0]):

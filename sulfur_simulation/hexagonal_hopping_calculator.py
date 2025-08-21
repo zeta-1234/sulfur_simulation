@@ -10,9 +10,9 @@ from scipy.optimize import (  # type: ignore[reportMissingTypeStubs]
     RootResults,
     root_scalar,  # type: ignore[reportMissingTypeStubs]
 )
-from square_hopping_calculator import HoppingCalculator
 
 from sulfur_simulation.scattering_calculation import JUMP_DIRECTIONS
+from sulfur_simulation.square_hopping_calculator import HoppingCalculator
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -60,7 +60,7 @@ class HexagonalHoppingCalculator(HoppingCalculator):
         base_rates = np.full(delta.shape[0], self._baserate)
 
         rates = np.exp(exponent) * base_rates
-        rates[[2, 4, 6]] = 0
+        rates[:, [0, 4, 8]] = 0
 
         row_sums = rates.sum(axis=1)
         over_rows = row_sums > 1.0
@@ -72,7 +72,6 @@ class HexagonalHoppingCalculator(HoppingCalculator):
 
         # Stationary probability
         rates[:, 4] = 1 - rates.sum(axis=1)
-
         return np.clip(rates, 0.0, 1.0)
 
     def _get_energy_landscape(
@@ -83,8 +82,8 @@ class HexagonalHoppingCalculator(HoppingCalculator):
         return np.full(positions.shape, 3.2e-19)
 
 
-class InteractingHoppingCalculator(HexagonalHoppingCalculator):
-    """Hopping Calculator with a Lennard Jones potential between particles."""
+class HexagonalInteractingHoppingCalculator(HexagonalHoppingCalculator):
+    """Hopping Calculator with a Lennard Jones potential between particles for a hexagonal lattice."""
 
     def __init__(
         self,
@@ -126,10 +125,15 @@ class InteractingHoppingCalculator(HexagonalHoppingCalculator):
 
         lookup: dict[tuple[int, int], float] = {}
         for dx in range(-cutoff_radius, cutoff_radius + 1):
-            for dy in range(-cutoff_radius, cutoff_radius + 1):
+            for dy in range(
+                -int(np.ceil(cutoff_radius * 2 / np.sqrt(3))),
+                int(np.ceil(cutoff_radius * 2 / np.sqrt(3))) + 1,
+            ):
                 if dx == 0 and dy == 0:
                     continue
-                r = self._lattice_spacing * np.sqrt(dx**2 + dy**2)
+                r = self._lattice_spacing * np.sqrt(
+                    (dx + dy / 2) ** 2 + (dy * np.sqrt(3) / 2) ** 2
+                )
                 if r <= cutoff_radius * self._lattice_spacing:
                     lookup[dx, dy] = self._interaction(r)
 

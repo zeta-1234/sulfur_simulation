@@ -108,8 +108,8 @@ class LineDefectHoppingCalculator(SquareHoppingCalculator):
         return energies
 
 
-class InteractingHoppingCalculator(SquareHoppingCalculator):
-    """Hopping Calculator with a Lennard Jones potential between particles."""
+class SquareInteractingHoppingCalculator(SquareHoppingCalculator):
+    """Hopping Calculator with a Lennard Jones potential between particles in a square lattice."""
 
     def __init__(  # noqa: PLR0913
         self,
