@@ -5,6 +5,10 @@ from __future__ import annotations
 import matplotlib.pyplot as plt
 import numpy as np
 
+from sulfur_simulation.hexagonal_hopping_calculator import (
+    HexagonalInteractingHoppingCalculator,
+    get_lennard_jones_potential,
+)
 from sulfur_simulation.isf import (
     ISFParameters,
     get_dephasing_rates,
@@ -18,12 +22,7 @@ from sulfur_simulation.scattering_calculation import (
 )
 from sulfur_simulation.show_simulation import (
     animate_particle_positions_skewed,
-    animate_particle_positions_square,
     plot_mean_jump_rates,
-)
-from sulfur_simulation.square_hopping_calculator import (
-    InteractingHoppingCalculator,
-    get_lennard_jones_potential,
 )
 
 if __name__ == "__main__":
@@ -31,9 +30,8 @@ if __name__ == "__main__":
         n_timesteps=1000,
         lattice_dimension=(100, 100),
         n_particles=500,
-        hopping_calculator=InteractingHoppingCalculator(
-            straight_baserate=0.01,
-            diagonal_baserate=0.01 / 5,
+        hopping_calculator=HexagonalInteractingHoppingCalculator(
+            baserate=0.01,
             temperature=200,
             lattice_spacing=2.5,
             interaction=get_lennard_jones_potential(sigma=2.55, epsilon=0.03 * 1.6e-19),
@@ -66,16 +64,9 @@ if __name__ == "__main__":
 
     plot_mean_jump_rates(results=results, ax=axes[2])
 
-    timesteps = np.arange(1, 1000, 20, dtype=int)
+    timesteps = np.arange(1, 100, 1, dtype=int)
 
-    anim1 = animate_particle_positions_square(
-        all_positions=results[0].positions,
-        lattice_dimension=params.lattice_dimension,
-        timesteps=timesteps,
-        lattice_spacing=2.5,
-    )
-
-    anim2 = animate_particle_positions_skewed(
+    anim = animate_particle_positions_skewed(
         all_positions=results[0].positions,
         lattice_dimension=params.lattice_dimension,
         timesteps=timesteps,

@@ -17,12 +17,11 @@ from sulfur_simulation.scattering_calculation import (
     run_multiple_simulations,
 )
 from sulfur_simulation.show_simulation import (
-    animate_particle_positions_skewed,
     animate_particle_positions_square,
     plot_mean_jump_rates,
 )
 from sulfur_simulation.square_hopping_calculator import (
-    InteractingHoppingCalculator,
+    SquareInteractingHoppingCalculator,
     get_lennard_jones_potential,
 )
 
@@ -31,7 +30,7 @@ if __name__ == "__main__":
         n_timesteps=1000,
         lattice_dimension=(100, 100),
         n_particles=500,
-        hopping_calculator=InteractingHoppingCalculator(
+        hopping_calculator=SquareInteractingHoppingCalculator(
             straight_baserate=0.01,
             diagonal_baserate=0.01 / 5,
             temperature=200,
@@ -68,18 +67,11 @@ if __name__ == "__main__":
 
     timesteps = np.arange(1, 1000, 20, dtype=int)
 
-    anim1 = animate_particle_positions_square(
+    anim = animate_particle_positions_square(
         all_positions=results[0].positions,
         lattice_dimension=params.lattice_dimension,
         timesteps=timesteps,
         lattice_spacing=2.5,
-    )
-
-    anim2 = animate_particle_positions_skewed(
-        all_positions=results[0].positions,
-        lattice_dimension=params.lattice_dimension,
-        timesteps=timesteps,
-        dx_dy=(2.5, 2.5 * np.sqrt(3) / 2),
     )
 
     plt.show()

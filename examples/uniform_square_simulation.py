@@ -59,7 +59,7 @@ if __name__ == "__main__":
 
     timesteps = np.arange(1, 12000, 20, dtype=int)
 
-    anim1 = animate_particle_positions_square(
+    anim = animate_particle_positions_square(
         all_positions=results[0].positions,
         lattice_dimension=params.lattice_dimension,
         timesteps=timesteps,
