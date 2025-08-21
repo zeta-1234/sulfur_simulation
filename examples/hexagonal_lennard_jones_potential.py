@@ -12,14 +12,14 @@ from sulfur_simulation.hopping_calculator import (
 )
 from sulfur_simulation.isf import (
     ISFParameters,
+    get_all_amplitudes,
     get_dephasing_rates,
-    get_multiple_amplitudes,
     plot_dephasing_rates,
     plot_isf,
 )
 from sulfur_simulation.scattering_calculation import (
     SimulationParameters,
-    run_multiple_simulations,
+    run_simulation,
 )
 from sulfur_simulation.show_simulation import (
     animate_particle_positions_skewed,
@@ -39,11 +39,11 @@ if __name__ == "__main__":
         ),
     )
 
-    results = run_multiple_simulations(n_runs=5, params=params)
+    results = run_simulation(n_runs=5, params=params)
 
     isf_params = ISFParameters(params=params)
 
-    all_amplitudes = get_multiple_amplitudes(isf_params=isf_params, results=results)
+    all_amplitudes = get_all_amplitudes(isf_params=isf_params, results=results)
 
     fig, axes = plt.subplots(1, 3, figsize=(15, 5))
 

@@ -169,22 +169,23 @@ def plot_mean_jump_rates(
     results: list[SimulationResult], ax: Axes | None = None
 ) -> tuple[Figure | SubFigure, Axes]:
     """Plot attempted and successful jump counts."""
-    jump_counter = np.array([result.jump_counter for result in results])
-    mean_jump_counter = jump_counter.mean(axis=0)
-
-    attempted_jump_counter = np.array(
-        [result.attempted_jump_counter for result in results]
-    )
-    mean_attempted_jump_counter = attempted_jump_counter.mean(axis=0)
     delta = JUMP_DIRECTIONS
     labels = [f"{d}" for d in delta]
 
-    indices = np.arange(len(mean_jump_counter))
     width = 0.35
     fig, ax = get_figure(ax=ax)
-    ax.bar(indices - width / 2, mean_jump_counter, width, label="Successful jumps")
+
+    jump_counts = np.array([result.jump_count for result in results])
+    mean_jump_count = jump_counts.mean(axis=0)
+
+    indices = np.arange(len(results))
+    ax.bar(indices - width / 2, mean_jump_count, width, label="Successful jumps")
+    attempted_jump_count = np.array(
+        [result.attempted_jump_counter for result in results]
+    )
+    mean_attempted_jump_count = attempted_jump_count.mean(axis=0)
     ax.bar(
-        indices + width / 2, mean_attempted_jump_counter, width, label="Attempted jumps"
+        indices + width / 2, mean_attempted_jump_count, width, label="Attempted jumps"
     )
     ax.set_xlabel("Direction (delta row, delta col)")
     ax.set_ylabel("Count")

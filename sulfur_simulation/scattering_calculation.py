@@ -68,7 +68,7 @@ class SimulationResult:
 
     positions: np.ndarray[tuple[int, int, int], np.dtype[np.bool_]]
     "The particles' positions at each timestep"
-    jump_counter: np.ndarray[tuple[int], np.dtype[np.int_]]
+    jump_count: np.ndarray[tuple[int], np.dtype[np.int_]]
     "The number of successful jumps in each direction"
     attempted_jump_counter: np.ndarray[tuple[int], np.dtype[np.int_]]
     "The number of jumps attempted"
@@ -102,7 +102,7 @@ def _make_jump(
     if result.positions[idx][final_idx]:
         return
 
-    result.jump_counter[jump_idx] += 1
+    result.jump_count[jump_idx] += 1
     result.positions[idx][final_idx] = True
     result.positions[idx][initial_index] = False
 
@@ -141,9 +141,10 @@ def _update_result(
             )
 
 
-def run_simulation(params: SimulationParameters, rng_seed: int) -> SimulationResult:
+def _run_single_simulation(
+    params: SimulationParameters, rng: Generator
+) -> SimulationResult:
     """Run the simulation."""
-    rng = np.random.default_rng(seed=rng_seed)
     all_positions = np.empty(
         (params.n_timesteps, *params.lattice_dimension), dtype=np.bool_
     )
@@ -152,7 +153,7 @@ def run_simulation(params: SimulationParameters, rng_seed: int) -> SimulationRes
     attempted_jump_counter = np.zeros(9, dtype=np.int_)
     out = SimulationResult(
         positions=all_positions,
-        jump_counter=jump_counter,
+        jump_count=jump_counter,
         attempted_jump_counter=attempted_jump_counter,
     )
 
@@ -171,8 +172,9 @@ def run_simulation(params: SimulationParameters, rng_seed: int) -> SimulationRes
     return out
 
 
-def run_multiple_simulations(
-    n_runs: int, params: SimulationParameters
+def run_simulation(
+    n_runs: int, params: SimulationParameters, rng: Generator | None = None
 ) -> list[SimulationResult]:
     """Run multiple simulations and return the results as a list."""
-    return [run_simulation(params=params, rng_seed=i) for i in range(n_runs)]
+    rng = np.random.default_rng() if rng is None else rng
+    return [_run_single_simulation(params=params, rng=rng) for _ in range(n_runs)]

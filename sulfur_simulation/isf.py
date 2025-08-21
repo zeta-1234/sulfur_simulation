@@ -75,7 +75,7 @@ def _gaussian_decay_function(
     x: np.ndarray[Any, np.dtype[np.float64]], a: float, b: float, c: float
 ) -> np.ndarray[Any, np.dtype[np.float64]]:
     """Return a generic exponential function."""
-    return a * np.exp(b * x) + c  # - 1000 * min(c, 0)
+    return a * np.exp(b * x) + c - 1000 * min(c, 0)
 
 
 def plot_isf(
@@ -92,27 +92,30 @@ def plot_isf(
         [_get_autocorrelation(amplitude[delta_k_index]) for amplitude in all_amplitudes]
     )
     mean_autocorrelation = all_autocorrelations.mean(axis=0)
-    std_autocorrelation = all_autocorrelations.std(axis=0) / np.sqrt(
-        all_autocorrelations.shape[0]
-    )
+    denom = all_autocorrelations.shape[0] - 1
+    with np.errstate(divide="ignore", invalid="ignore"):
+        std_autocorrelation = all_autocorrelations.std(axis=0) / np.sqrt(denom)
 
     fig, ax = get_figure(ax=ax)
 
     optimal_params = _fit_gaussian_decay(
         t=t,
         autocorrelation=mean_autocorrelation,
-        std_autocorrelation=std_autocorrelation,
+        std_autocorrelation=std_autocorrelation
+        if all_autocorrelations.shape[0] > 1
+        else None,
     )
 
     ax.plot(t, mean_autocorrelation, label="Mean ISF")
-    ax.fill_between(
-        t,
-        mean_autocorrelation - std_autocorrelation,
-        mean_autocorrelation + std_autocorrelation,
-        color="gray",
-        alpha=0.3,
-        label="±1 std",
-    )
+    if all_autocorrelations.shape[0] > 1:
+        ax.fill_between(
+            t,
+            mean_autocorrelation - std_autocorrelation,
+            mean_autocorrelation + std_autocorrelation,
+            color="gray",
+            alpha=0.3,
+            label="±1 std",
+        )
 
     ax.plot(t, _gaussian_decay_function(t, *optimal_params), "r-", label="Fitted Curve")
     ax.legend()
@@ -213,7 +216,7 @@ def get_amplitudes(
     return amplitudes
 
 
-def get_multiple_amplitudes(
+def get_all_amplitudes(
     isf_params: ISFParameters,
     results: list[SimulationResult],
 ) -> list[np.ndarray[tuple[int, int], np.dtype[np.complex128]]]:
