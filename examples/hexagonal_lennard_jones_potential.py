@@ -27,7 +27,7 @@ from sulfur_simulation.show_simulation import (
 
 if __name__ == "__main__":
     params = SimulationParameters(
-        n_timesteps=1000,
+        n_timesteps=12000,
         lattice_dimension=(100, 100),
         n_particles=500,
         hopping_calculator=HexagonalInteractingHoppingCalculator(
@@ -64,7 +64,7 @@ if __name__ == "__main__":
 
     plot_mean_jump_rates(results=results, ax=axes[2])
 
-    timesteps = np.arange(1, 100, 1, dtype=int)
+    timesteps = np.arange(1, params.n_timesteps, 20, dtype=int)
 
     anim = animate_particle_positions_skewed(
         all_positions=results[0].positions,
