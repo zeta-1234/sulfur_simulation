@@ -75,7 +75,7 @@ def _gaussian_decay_function(
     x: np.ndarray[Any, np.dtype[np.float64]], a: float, b: float, c: float
 ) -> np.ndarray[Any, np.dtype[np.float64]]:
     """Return a generic exponential function."""
-    return a * np.exp(b * x) + c
+    return a * np.exp(b * x) + c  # - 1000 * min(c, 0)
 
 
 def plot_isf(
@@ -87,27 +87,28 @@ def plot_isf(
     ax: Axes | None = None,
 ) -> tuple[Figure | SubFigure, Axes]:
     """Plot autocorrelation data with an exponential curve fit on a given axis."""
-    all_results = np.array(x)
-    mean_amplitudes = all_results.mean(axis=0)
-    std_amplitudes = all_results.std(axis=0)
+    all_amplitudes = np.array(x)
+    all_autocorrelations = np.array(
+        [_get_autocorrelation(amplitude[delta_k_index]) for amplitude in all_amplitudes]
+    )
+    mean_autocorrelation = all_autocorrelations.mean(axis=0)
+    std_autocorrelation = all_autocorrelations.std(axis=0) / np.sqrt(
+        all_autocorrelations.shape[0]
+    )
 
     fig, ax = get_figure(ax=ax)
-    autocorrelation_mean = _get_autocorrelation(mean_amplitudes[delta_k_index])
-    autocorrelation_std = _get_autocorrelation(std_amplitudes[delta_k_index])
 
-    optimal_params = _fit_gaussian_decay(t=t, autocorrelation=autocorrelation_mean)
-    lower_params = _fit_gaussian_decay(
-        t=t, autocorrelation=autocorrelation_mean - autocorrelation_std
-    )
-    upper_params = _fit_gaussian_decay(
-        t=t, autocorrelation=autocorrelation_mean + autocorrelation_std
+    optimal_params = _fit_gaussian_decay(
+        t=t,
+        autocorrelation=mean_autocorrelation,
+        std_autocorrelation=std_autocorrelation,
     )
 
-    ax.plot(t, autocorrelation_mean, label="Mean ISF")
+    ax.plot(t, mean_autocorrelation, label="Mean ISF")
     ax.fill_between(
         t,
-        _gaussian_decay_function(t, *lower_params),
-        _gaussian_decay_function(t, *upper_params),
+        mean_autocorrelation - std_autocorrelation,
+        mean_autocorrelation + std_autocorrelation,
         color="gray",
         alpha=0.3,
         label="±1 std",
@@ -124,7 +125,10 @@ def plot_isf(
 
 
 def _fit_gaussian_decay(
-    t: np.ndarray, autocorrelation: np.ndarray, slope_threshold: float = 1e-3
+    t: np.ndarray,
+    autocorrelation: np.ndarray,
+    std_autocorrelation: np.ndarray | None = None,
+    slope_threshold: float = 1e-3,
 ) -> NDArray[np.float64]:
     shortest_valid_length = 10
     derivative = np.gradient(autocorrelation, t)
@@ -136,6 +140,8 @@ def _fit_gaussian_decay(
         if len(valid_cutoffs := flat_indices[flat_indices >= shortest_valid_length]) > 0
         else flat_indices[0]
     )
+    if std_autocorrelation is not None:
+        std_autocorrelation[std_autocorrelation == 0] = 1e-8
     optimal_params, _ = curve_fit(  # type: ignore types defined by curve_fit
         _gaussian_decay_function,
         t[:cutoff_index],
@@ -143,6 +149,10 @@ def _fit_gaussian_decay(
         p0=(1, -0.005, 1),
         bounds=([0, -np.inf, -np.inf], [np.inf, 0, np.inf]),
         maxfev=100000,
+        sigma=None
+        if std_autocorrelation is None
+        else std_autocorrelation[:cutoff_index],
+        absolute_sigma=True,
     )
 
     return cast("NDArray[np.float64]", optimal_params)
