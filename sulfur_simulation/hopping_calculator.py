@@ -38,6 +38,12 @@ class BaseRate(ABC):
         """Build lookup table for lennard jones potentials."""
 
 
+# TODO: Currently bad because LJ lookup table is generated in BaseRate class.  # noqa: FIX002
+# Better way to do it would be to pass two vectors that define the lattice in 2D space,
+# and be able to calculate any LJ potentials using those two vectors.
+# That way the lookup table calculator can be outside of BaseRate but still work in the general case.
+
+
 @dataclass(kw_only=True, frozen=True)
 class SquareBaseRate(BaseRate):
     """Baserates for hopping."""
@@ -345,6 +351,3 @@ def _find_cutoff_radius(
         return 0
     msg = "No root found in the given range."
     raise ValueError(msg)
-
-
-# TODO: Currently bad because LJ lookup table is generated in BaseRate class. Better way to do it would be to pass two vectors that define the lattice in 2D space, and be able to calculate any LJ potentials using those two vectors. That way the lookup table calculator can be outside of BaseRate but still work in the general case.
