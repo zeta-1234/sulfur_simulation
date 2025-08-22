@@ -33,6 +33,7 @@
         "waals",
         "zorder",
         "xticklabels",
+        "yticklabels",
         "pickler",
         "savez",
         "unpickler",
