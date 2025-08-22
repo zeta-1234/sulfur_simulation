@@ -39,6 +39,8 @@
         "unpickler",
         "normalise",
         "normalised",
+        "xtick",
+        "ytick"
     ],
     "flagWords": [
         "hte",
