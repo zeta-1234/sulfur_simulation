@@ -20,63 +20,50 @@ if TYPE_CHECKING:
 
 def animate_particle_positions(
     all_positions: NDArray[np.bool_],
+    lattice_dimension: tuple[int, int],
+    timesteps: NDArray[np.float64],
     lattice_vectors: tuple[NDArray[np.float64], NDArray[np.float64]],
-    timesteps: NDArray[np.int_],
-    max_ticks: int = 10,
 ) -> animation.FuncAnimation:
-    """Animate particle positions on a skewed 2D lattice defined by two lattice vectors."""
+    """Animate particle positions on a skewed lattice defined by two lattice vectors."""
+    n_cols, n_rows = lattice_dimension
     v0, v1 = lattice_vectors
-    n_rows, n_cols = all_positions.shape[1:3]
 
-    rows, cols = np.meshgrid(
-        np.arange(n_rows, dtype=np.float64),
-        np.arange(n_cols, dtype=np.float64),
-        indexing="ij",
+    lattice_coords = np.array(
+        [col * v0 + row * v1 for row in range(n_rows) for col in range(n_cols)]
     )
-    lattice_positions: NDArray[np.float64] = (
-        cols[..., None] * v0 + rows[..., None] * v1
-    ).reshape(-1, 2)
+    lattice_x: NDArray[np.float64] = lattice_coords[:, 0]
+    lattice_y: NDArray[np.float64] = lattice_coords[:, 1]
 
-    x_min, y_min = lattice_positions.min(axis=0)
-    x_max, y_max = lattice_positions.max(axis=0)
-    fig, ax = plt.subplots(figsize=(6, 6 * ((y_max - y_min) / (x_max - x_min))))
-
-    ax.scatter(
-        lattice_positions[:, 0],
-        lattice_positions[:, 1],
-        color="aqua",
-        s=5,
-        marker=".",
-        zorder=0,
-    )
-
-    particles: PathCollection = ax.scatter(
-        [], [], color="red", s=20, edgecolors="black", zorder=1
-    )
-
+    fig, ax = plt.subplots(figsize=(6, 6))
     ax.set_aspect("equal")
     ax.set_title("Particle Simulation")
-    ax.set_xlim(x_min - 0.5, x_max + 0.5)
-    ax.set_ylim(y_min - 0.5, y_max + 0.5)
-    ax.set_xlabel("Column index")
-    ax.set_ylabel("Row index")
-    ax.legend(["Sites", "Particles"], loc="lower right")
 
-    def nice_ticks(n_points: int, max_ticks: int = 10) -> NDArray[np.int_]:
-        step = max(1, int(np.ceil(n_points / max_ticks)))
-        return np.arange(0, n_points, step)
+    ax.set_xlim(lattice_x.min() - 1, lattice_x.max() + 1)
+    ax.set_ylim(lattice_y.min() - 1, lattice_y.max() + 1)
+    ax.set_xlabel("x distance")
+    ax.set_ylabel("y distance")
 
-    ax.set_xticks(nice_ticks(n_cols, max_ticks))
-    ax.set_xticklabels([str(i) for i in nice_ticks(n_cols, max_ticks)])
-    ax.set_yticks(nice_ticks(n_rows, max_ticks))
-    ax.set_yticklabels([str(i) for i in nice_ticks(n_rows, max_ticks)])
+    ax.scatter(
+        lattice_x, lattice_y, color="aqua", marker=".", s=5, zorder=0, label="Sites"
+    )
+
+    particle_scatter: PathCollection = ax.scatter(
+        [], [], color="red", s=20, edgecolors="black", zorder=1, label="Particles"
+    )
+    ax.legend(loc="lower right")
 
     def update(frame: int) -> tuple[PathCollection]:
-        r_idx, c_idx = np.nonzero(all_positions[frame])
-        positions = c_idx[:, None] * v0 + r_idx[:, None] * v1
-        particles.set_offsets(positions)
+        occupancy = all_positions[frame]
+        rows, cols = np.nonzero(occupancy)
+        coords = np.array(
+            [col * v0 + row * v1 for row, col in zip(rows, cols, strict=False)]
+        )
+        if coords.size > 0:
+            particle_scatter.set_offsets(coords)
+        else:
+            particle_scatter.set_offsets(np.empty((0, 2)))
         ax.set_title(f"Timestep: {frame}")
-        return (particles,)
+        return (particle_scatter,)
 
     return animation.FuncAnimation(
         fig,
@@ -86,9 +73,6 @@ def animate_particle_positions(
         blit=False,
         repeat=True,
     )
-
-
-# TODO: need to make axes scale properly to figure
 
 
 def get_timeframe_str(
