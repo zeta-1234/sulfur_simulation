@@ -35,7 +35,9 @@
         "xticklabels",
         "pickler",
         "savez",
-        "unpickler"
+        "unpickler",
+        "normalise",
+        "normalised",
     ],
     "flagWords": [
         "hte",

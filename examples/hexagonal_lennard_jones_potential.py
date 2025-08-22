@@ -34,7 +34,7 @@ if __name__ == "__main__":
         hopping_calculator=InteractingHoppingCalculator(
             baserate=HexagonalBaseRate(rate=0.01),
             temperature=200,
-            lattice_spacing=2.5,
+            lattice_properties=(2.5, np.array([1, 0]), np.array([0.5, np.sqrt(3) / 2])),
             interaction=get_lennard_jones_potential(sigma=2.45, epsilon=0.03 * 1.6e-19),
         ),
     )

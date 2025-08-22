@@ -27,12 +27,13 @@ from sulfur_simulation.show_simulation import (
 
 if __name__ == "__main__":
     params = SimulationParameters(
-        n_timesteps=1000,
+        n_timesteps=12000,
         lattice_dimension=(100, 100),
         n_particles=500,
         hopping_calculator=BaseRateHoppingCalculator(
             baserate=SquareBaseRate(straight_rate=0.01, diagonal_rate=0.01 / 5),
             temperature=200,
+            lattice_directions=(np.array([1, 0]), np.array({0, 1})),
         ),
     )
 

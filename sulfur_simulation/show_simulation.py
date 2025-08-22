@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from matplotlib.axes import Axes
     from matplotlib.collections import PathCollection
     from matplotlib.figure import Figure, SubFigure
+    from numpy.typing import NDArray
 
     from sulfur_simulation.scattering_calculation import SimulationParameters
 
@@ -178,7 +179,7 @@ def plot_mean_jump_rates(
     jump_counts = np.array([result.jump_count for result in results])
     mean_jump_count = jump_counts.mean(axis=0)
 
-    indices = np.arange(len(results))
+    indices: NDArray[np.int_] = np.arange(mean_jump_count.shape[0], dtype=np.int_)
     ax.bar(indices - width / 2, mean_jump_count, width, label="Successful jumps")
     attempted_jump_count = np.array(
         [result.attempted_jump_counter for result in results]
