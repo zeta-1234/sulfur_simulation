@@ -21,7 +21,7 @@ from sulfur_simulation.scattering_calculation import (
     run_simulation,
 )
 from sulfur_simulation.show_simulation import (
-    animate_particle_positions_square,
+    animate_particle_positions,
     plot_mean_jump_rates,
 )
 
@@ -65,10 +65,10 @@ if __name__ == "__main__":
 
     timesteps = np.arange(1, params.n_timesteps, 20, dtype=int)
 
-    anim = animate_particle_positions_square(
+    anim = animate_particle_positions(
         all_positions=results[0].positions,
-        lattice_dimension=params.lattice_dimension,
+        lattice_vectors=(np.array([1, 0]), np.array([0, 1])),
         timesteps=timesteps,
-        lattice_spacing=2.5,
     )
+
     plt.show()
