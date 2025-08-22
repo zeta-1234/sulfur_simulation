@@ -28,21 +28,6 @@ class BaseRate(ABC):
         """Generate grid of baserates."""
         ...
 
-    @abstractmethod
-    def build_lj_lookup_table(
-        self,
-        cutoff_radius: int,
-        lattice_spacing: float,
-        interaction: Callable[[float], float],
-    ) -> dict[tuple[int, int], float]:
-        """Build lookup table for lennard jones potentials."""
-
-
-# TODO: Currently bad because LJ lookup table is generated in BaseRate class.  # noqa: FIX002
-# Better way to do it would be to pass two vectors that define the lattice in 2D space,
-# and be able to calculate any LJ potentials using those two vectors.
-# That way the lookup table calculator can be outside of BaseRate but still work in the general case.
-
 
 @dataclass(kw_only=True, frozen=True)
 class SquareBaseRate(BaseRate):
@@ -70,24 +55,6 @@ class SquareBaseRate(BaseRate):
             ]
         )
 
-    @override
-    def build_lj_lookup_table(
-        self,
-        cutoff_radius: int,
-        lattice_spacing: float,
-        interaction: Callable[[float], float],
-    ) -> dict[tuple[int, int], float]:
-        lookup: dict[tuple[int, int], float] = {}
-
-        for dx in range(-cutoff_radius, cutoff_radius + 1):
-            for dy in range(-cutoff_radius, cutoff_radius + 1):
-                if dx == 0 and dy == 0:
-                    continue
-                r = lattice_spacing * np.sqrt(dx**2 + dy**2)
-                if r <= cutoff_radius * lattice_spacing:
-                    lookup[dx, dy] = interaction(r)
-        return lookup
-
 
 @dataclass(kw_only=True, frozen=True)
 class HexagonalBaseRate(BaseRate):
@@ -112,30 +79,6 @@ class HexagonalBaseRate(BaseRate):
             ]
         )
 
-    @override
-    def build_lj_lookup_table(
-        self,
-        cutoff_radius: int,
-        lattice_spacing: float,
-        interaction: Callable[[float], float],
-    ) -> dict[tuple[int, int], float]:
-        lookup: dict[tuple[int, int], float] = {}
-
-        for dx in range(-cutoff_radius, cutoff_radius + 1):
-            for dy in range(
-                -int(np.ceil(cutoff_radius * 2 / np.sqrt(3))),
-                int(np.ceil(cutoff_radius * 2 / np.sqrt(3))) + 1,
-            ):
-                if dx == 0 and dy == 0:
-                    continue
-                r = lattice_spacing * np.sqrt(
-                    (dx + dy / 2) ** 2 + (dy * np.sqrt(3) / 2) ** 2
-                )
-                if r <= cutoff_radius * lattice_spacing:
-                    lookup[dx, dy] = interaction(r)
-
-        return lookup
-
 
 class HoppingCalculator(ABC):
     """Abstract base class for calculating hopping probabilities."""
@@ -153,9 +96,32 @@ class BaseRateHoppingCalculator(HoppingCalculator):
         *,
         baserate: BaseRate,
         temperature: float,
+        lattice_directions: tuple[np.ndarray, np.ndarray],
     ) -> None:
         self._baserate = baserate
         self._temperature = temperature
+        self._lattice_directions = lattice_directions
+
+    @property
+    def normalised_directions(self) -> tuple[np.ndarray, np.ndarray]:
+        """Normalise lattice directions.
+
+        Raises
+        ------
+        ValueError
+            If the lattice vectors are not parallel.
+        ValueError
+            If the lattice vectors are zero.
+        """
+        a, b = self._lattice_directions
+        if np.isclose(a[0] * b[1] - a[1] * b[0], 0.0):
+            msg = "Lattice vectors cannot be parallel."
+            raise ValueError(msg)
+        if np.linalg.norm(a) == 0 or np.linalg.norm(b) == 0:
+            msg = "Lattice vectors cannot be zero."
+            raise ValueError(msg)
+
+        return a / np.linalg.norm(a), b / np.linalg.norm(b)
 
     @override
     def get_hopping_probabilities(
@@ -211,6 +177,19 @@ class BaseRateHoppingCalculator(HoppingCalculator):
 class LineDefectHoppingCalculator(BaseRateHoppingCalculator):
     """Hopping Calculator for a line defect in a square lattice."""
 
+    def __init__(
+        self,
+        *,
+        baserate: BaseRate,
+        temperature: float,
+        lattice_directions: tuple[np.ndarray, np.ndarray],
+    ) -> None:
+        super().__init__(
+            baserate=baserate,
+            temperature=temperature,
+            lattice_directions=lattice_directions,
+        )
+
     @override
     def _get_energy_landscape(
         self, positions: np.ndarray[tuple[int, int], np.dtype[np.bool_]]
@@ -229,18 +208,39 @@ class InteractingHoppingCalculator(BaseRateHoppingCalculator):
         *,
         baserate: BaseRate,
         temperature: float,
-        lattice_spacing: float,
+        lattice_properties: tuple[float, np.ndarray, np.ndarray],
         interaction: Callable[[float], float],
         cutoff_potential: float = 1.6e-22,
     ) -> None:
         super().__init__(
             baserate=baserate,
             temperature=temperature,
+            lattice_directions=(lattice_properties[1], lattice_properties[2]),
         )
-
-        self._lattice_spacing = lattice_spacing
+        self._lattice_spacing = lattice_properties[0]
         self._interaction = interaction
         self.cutoff_potential = cutoff_potential
+
+    def _build_lj_lookup_table(
+        self, cutoff_radius: int
+    ) -> dict[tuple[int, int], float]:
+        lookup: dict[tuple[int, int], float] = {}
+
+        for dx in range(-cutoff_radius, cutoff_radius + 1):
+            for dy in range(-cutoff_radius, cutoff_radius + 1):
+                if dx == 0 and dy == 0:
+                    continue
+
+                displacement = (
+                    dx * self.normalised_directions[0]
+                    + dy * self.normalised_directions[1]
+                )
+                r = float(self._lattice_spacing * np.linalg.norm(displacement))
+
+                if r <= cutoff_radius * self._lattice_spacing:
+                    lookup[dx, dy] = self._interaction(r)
+
+        return lookup
 
     @cached_property
     def _potential_table(self) -> dict[tuple[int, int], float]:
@@ -262,11 +262,7 @@ class InteractingHoppingCalculator(BaseRateHoppingCalculator):
 
         cutoff_radius = int(np.ceil(cutoff_radius / self._lattice_spacing))
 
-        return self._baserate.build_lj_lookup_table(
-            cutoff_radius=cutoff_radius,
-            lattice_spacing=self._lattice_spacing,
-            interaction=self._interaction,
-        )
+        return self._build_lj_lookup_table(cutoff_radius=cutoff_radius)
 
     @override
     def _get_energy_landscape(
