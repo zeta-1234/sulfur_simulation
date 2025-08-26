@@ -32,7 +32,15 @@
         "brentq",
         "waals",
         "zorder",
-        "xticklabels"
+        "xticklabels",
+        "yticklabels",
+        "pickler",
+        "savez",
+        "unpickler",
+        "normalise",
+        "normalised",
+        "xtick",
+        "ytick"
     ],
     "flagWords": [
         "hte",

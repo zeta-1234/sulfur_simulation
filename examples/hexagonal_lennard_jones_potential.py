@@ -1,4 +1,4 @@
-"""Example simulation for a square lattice with a potential energy well across the center."""
+"""Example simulation for a square lattice with a Lennard Jones interacting potential."""
 
 from __future__ import annotations
 
@@ -6,8 +6,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from sulfur_simulation.hopping_calculator import (
-    LineDefectHoppingCalculator,
-    SquareBaseRate,
+    HexagonalBaseRate,
+    InteractingHoppingCalculator,
+    get_lennard_jones_potential,
 )
 from sulfur_simulation.isf import (
     ISFParameters,
@@ -27,13 +28,14 @@ from sulfur_simulation.show_simulation import (
 
 if __name__ == "__main__":
     params = SimulationParameters(
-        n_timesteps=1000,
+        n_timesteps=12000,
         lattice_dimension=(100, 100),
         n_particles=500,
-        hopping_calculator=LineDefectHoppingCalculator(
-            baserate=SquareBaseRate(straight_rate=0.01, diagonal_rate=0.01 / 5),
+        hopping_calculator=InteractingHoppingCalculator(
+            baserate=HexagonalBaseRate(rate=0.01),
             temperature=200,
-            lattice_directions=(np.array([1, 0]), np.array([0, 1])),
+            lattice_properties=(2.5, np.array([1, 0]), np.array([0.5, np.sqrt(3) / 2])),
+            interaction=get_lennard_jones_potential(sigma=2.45, epsilon=0.03 * 1.6e-19),
         ),
     )
 
@@ -68,7 +70,7 @@ if __name__ == "__main__":
     anim = animate_particle_positions(
         all_positions=results[0].positions,
         lattice_dimension=(100, 100),
-        lattice_vectors=(np.array([1, 0]), np.array([0, 1])),
+        lattice_vectors=(np.array([1, 0]), np.array([1 / 2, np.sqrt(3) / 2])),
         timesteps=timesteps,
     )
 

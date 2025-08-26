@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import warnings
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from functools import cached_property
 from typing import TYPE_CHECKING, cast, override
 
@@ -12,8 +13,71 @@ from scipy.optimize import (  # type: ignore[reportMissingTypeStubs]
     root_scalar,  # type: ignore[reportMissingTypeStubs]
 )
 
+from sulfur_simulation.scattering_calculation import JUMP_DIRECTIONS
+
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+
+class BaseRate(ABC):
+    """Return grid of baserates."""
+
+    @property
+    @abstractmethod
+    def grid(self) -> np.ndarray[tuple[int, int], np.dtype[np.floating]]:
+        """Generate grid of baserates."""
+        ...
+
+
+@dataclass(kw_only=True, frozen=True)
+class SquareBaseRate(BaseRate):
+    """Baserates for hopping."""
+
+    straight_rate: float
+    "Baserate for moving horizontally or vertically in a square lattice"
+    diagonal_rate: float = 0
+    "Baserate for moving diagonally in a square lattice"
+
+    @property
+    @override
+    def grid(self) -> np.ndarray[tuple[int, int], np.dtype[np.floating]]:
+        return np.array(
+            [
+                self.diagonal_rate,
+                self.straight_rate,
+                self.diagonal_rate,
+                self.straight_rate,
+                0,
+                self.straight_rate,
+                self.diagonal_rate,
+                self.straight_rate,
+                self.diagonal_rate,
+            ]
+        )
+
+
+@dataclass(kw_only=True, frozen=True)
+class HexagonalBaseRate(BaseRate):
+    """Baserates for hopping."""
+
+    rate: float
+
+    @property
+    @override
+    def grid(self) -> np.ndarray[tuple[int, int], np.dtype[np.floating]]:
+        return np.array(
+            [
+                0,
+                self.rate,
+                self.rate,
+                self.rate,
+                0,
+                self.rate,
+                self.rate,
+                self.rate,
+                0,
+            ]
+        )
 
 
 class HoppingCalculator(ABC):
@@ -24,13 +88,40 @@ class HoppingCalculator(ABC):
         """Get hopping probabilities."""
 
 
-class SquareHoppingCalculator(HoppingCalculator):
+class BaseRateHoppingCalculator(HoppingCalculator):
     """Class for calculating hopping probabilities in a square lattice."""
 
-    def __init__(self, baserate: tuple[float, float], temperature: float) -> None:
-        self._straight_baserate = baserate[0]
-        self._diagonal_baserate = baserate[1]
+    def __init__(
+        self,
+        *,
+        baserate: BaseRate,
+        temperature: float,
+        lattice_directions: tuple[np.ndarray, np.ndarray],
+    ) -> None:
+        self._baserate = baserate
         self._temperature = temperature
+        self._lattice_directions = lattice_directions
+
+    @property
+    def normalised_directions(self) -> tuple[np.ndarray, np.ndarray]:
+        """Normalise lattice directions.
+
+        Raises
+        ------
+        ValueError
+            If the lattice vectors are not parallel.
+        ValueError
+            If the lattice vectors are zero.
+        """
+        a, b = self._lattice_directions
+        if np.isclose(a[0] * b[1] - a[1] * b[0], 0.0):
+            msg = "Lattice vectors cannot be parallel."
+            raise ValueError(msg)
+        if np.linalg.norm(a) == 0 or np.linalg.norm(b) == 0:
+            msg = "Lattice vectors cannot be zero."
+            raise ValueError(msg)
+
+        return a / np.linalg.norm(a), b / np.linalg.norm(b)
 
     @override
     def get_hopping_probabilities(
@@ -39,28 +130,20 @@ class SquareHoppingCalculator(HoppingCalculator):
         energies = self._get_energy_landscape(positions=positions)
         rows, cols = np.nonzero(positions)
 
-        delta = np.array(
-            [
-                (-1, -1),
-                (-1, 0),
-                (-1, 1),
-                (0, -1),
-                (0, 0),
-                (0, 1),
-                (1, -1),
-                (1, 0),
-                (1, 1),
+        delta = JUMP_DIRECTIONS
+        beta = 1 / (2 * Boltzmann * self._temperature)
+        # take smallest baserate and use it to define a maximum valid exp argument
+        max_exp_arg = np.log(1 / np.min(self._baserate.grid[self._baserate.grid > 0]))
+
+        # Compute energy differences to neighbors
+        energy_difference = (
+            energies[
+                (rows[:, None] + delta[:, 0]) % positions.shape[0],
+                (cols[:, None] + delta[:, 1]) % positions.shape[1],
             ]
+            - energies[rows, cols][:, None]
         )
 
-        neighbor_rows = (rows[:, None] + delta[:, 0]) % positions.shape[0]
-        neighbor_cols = (cols[:, None] + delta[:, 1]) % positions.shape[1]
-        neighbor_energies = energies[neighbor_rows, neighbor_cols]
-        current_energies = energies[rows, cols][:, None]
-
-        max_exp_arg = np.log(1 / min(self._straight_baserate, self._diagonal_baserate))
-        beta = 1 / (2 * Boltzmann * self._temperature)
-        energy_difference = neighbor_energies - current_energies
         exponent = np.clip(-beta * energy_difference, a_min=None, a_max=max_exp_arg)
         if np.any(np.isclose(exponent, max_exp_arg)):
             warnings.warn(
@@ -68,16 +151,20 @@ class SquareHoppingCalculator(HoppingCalculator):
                 stacklevel=2,
             )
 
-        base_rates = np.full(delta.shape[0], self._straight_baserate)
-        base_rates[[0, 2, 6, 8]] = self._diagonal_baserate
-        base_rates[4] = 0
+        rates = np.exp(exponent) * self._baserate.grid
 
-        rates = np.exp(exponent) * base_rates
+        row_sums = rates.sum(axis=1)
+        over_rows = row_sums > 1.0
+        rates[over_rows] /= row_sums[over_rows, None]
 
-        if np.sum(rates) > 1.0:
-            rates /= np.sum(rates)
+        warning_threshold = 0.5
+        if np.any(row_sums > warning_threshold):
+            warnings.warn("Some probabilities exceed 0.5", stacklevel=2)
 
-        return rates
+        # Stationary probability
+        rates[:, 4] = 1 - rates.sum(axis=1)
+
+        return np.clip(rates, 0.0, 1.0)
 
     def _get_energy_landscape(
         self, positions: np.ndarray[tuple[int, int], np.dtype[np.bool_]]
@@ -87,8 +174,21 @@ class SquareHoppingCalculator(HoppingCalculator):
         return np.full(positions.shape, 3.2e-19)
 
 
-class LineDefectHoppingCalculator(SquareHoppingCalculator):
+class LineDefectHoppingCalculator(BaseRateHoppingCalculator):
     """Hopping Calculator for a line defect in a square lattice."""
+
+    def __init__(
+        self,
+        *,
+        baserate: BaseRate,
+        temperature: float,
+        lattice_directions: tuple[np.ndarray, np.ndarray],
+    ) -> None:
+        super().__init__(
+            baserate=baserate,
+            temperature=temperature,
+            lattice_directions=lattice_directions,
+        )
 
     @override
     def _get_energy_landscape(
@@ -100,37 +200,59 @@ class LineDefectHoppingCalculator(SquareHoppingCalculator):
         return energies
 
 
-class InteractingHoppingCalculator(SquareHoppingCalculator):
-    """Hopping Calculator with a Lennard Jones potential between particles."""
+class InteractingHoppingCalculator(BaseRateHoppingCalculator):
+    """Hopping Calculator with a Lennard Jones potential between particles in a square lattice."""
 
     def __init__(
         self,
-        baserate: tuple[float, float],
+        *,
+        baserate: BaseRate,
         temperature: float,
-        lattice_spacing: float,
+        lattice_properties: tuple[float, np.ndarray, np.ndarray],
         interaction: Callable[[float], float],
-        cutoff_radius_potential: float = 1.6e-22,
+        cutoff_potential: float = 1.6e-22,
     ) -> None:
-        super().__init__(baserate, temperature)
-
-        self._lattice_spacing = lattice_spacing
+        super().__init__(
+            baserate=baserate,
+            temperature=temperature,
+            lattice_directions=(lattice_properties[1], lattice_properties[2]),
+        )
+        self._lattice_spacing = lattice_properties[0]
         self._interaction = interaction
-        self._cutoff_radius_potential = cutoff_radius_potential
+        self.cutoff_potential = cutoff_potential
+
+    def _build_lj_lookup_table(
+        self, cutoff_radius: int
+    ) -> dict[tuple[int, int], float]:
+        lookup: dict[tuple[int, int], float] = {}
+
+        for dx in range(-cutoff_radius, cutoff_radius + 1):
+            for dy in range(-cutoff_radius, cutoff_radius + 1):
+                if dx == 0 and dy == 0:
+                    continue
+
+                displacement = (
+                    dx * self.normalised_directions[0]
+                    + dy * self.normalised_directions[1]
+                )
+                r = float(self._lattice_spacing * np.linalg.norm(displacement))
+
+                if r <= cutoff_radius * self._lattice_spacing:
+                    lookup[dx, dy] = self._interaction(r)
+
+        return lookup
 
     @cached_property
     def _potential_table(self) -> dict[tuple[int, int], float]:
-        """Create lookup table for interactin potential values."""
+        """Create lookup table for interaction potential values."""
         max_cutoff_radius = 6
 
         def _energy_difference(r: float) -> float:
-            # subtract potential at infinity
-            return (
-                abs(
-                    self._interaction(r)
-                    - self._interaction(1000 * self._lattice_spacing)
-                )
-                - self._cutoff_radius_potential
+            # subtract potential at infinity and the cutoff potential
+            abs_difference = abs(
+                self._interaction(r) - self._interaction(1000 * self._lattice_spacing)
             )
+            return abs_difference - self.cutoff_potential
 
         cutoff_radius = _find_cutoff_radius(
             energy_difference=_energy_difference,
@@ -140,16 +262,7 @@ class InteractingHoppingCalculator(SquareHoppingCalculator):
 
         cutoff_radius = int(np.ceil(cutoff_radius / self._lattice_spacing))
 
-        lookup: dict[tuple[int, int], float] = {}
-        for dx in range(-cutoff_radius, cutoff_radius + 1):
-            for dy in range(-cutoff_radius, cutoff_radius + 1):
-                if dx == 0 and dy == 0:
-                    continue
-                r = self._lattice_spacing * np.sqrt(dx**2 + dy**2)
-                if r <= cutoff_radius * self._lattice_spacing:
-                    lookup[dx, dy] = self._interaction(r)
-
-        return lookup
+        return self._build_lj_lookup_table(cutoff_radius=cutoff_radius)
 
     @override
     def _get_energy_landscape(

@@ -5,10 +5,13 @@ from __future__ import annotations
 import matplotlib.pyplot as plt
 import numpy as np
 
-from sulfur_simulation.hopping_calculator import SquareHoppingCalculator
+from sulfur_simulation.hopping_calculator import (
+    BaseRateHoppingCalculator,
+    SquareBaseRate,
+)
 from sulfur_simulation.isf import (
     ISFParameters,
-    get_amplitudes,
+    get_all_amplitudes,
     get_dephasing_rates,
     plot_dephasing_rates,
     plot_isf,
@@ -18,7 +21,8 @@ from sulfur_simulation.scattering_calculation import (
     run_simulation,
 )
 from sulfur_simulation.show_simulation import (
-    animate_particle_positions_square,
+    animate_particle_positions,
+    plot_mean_jump_rates,
 )
 
 if __name__ == "__main__":
@@ -26,37 +30,46 @@ if __name__ == "__main__":
         n_timesteps=12000,
         lattice_dimension=(100, 100),
         n_particles=500,
-        rng_seed=1,
-        hopping_calculator=SquareHoppingCalculator(
-            baserate=(0.01, 0.01 / 5), temperature=200
+        hopping_calculator=BaseRateHoppingCalculator(
+            baserate=SquareBaseRate(straight_rate=0.01, diagonal_rate=0.01 / 5),
+            temperature=200,
+            lattice_directions=(np.array([1, 0]), np.array({0, 1})),
         ),
     )
 
-    positions = run_simulation(params=params)
-    isf_params = ISFParameters(params=params)
-    amplitudes = get_amplitudes(isf_params=isf_params, positions=positions)
+    results = run_simulation(n_runs=3, params=params)
 
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+    isf_params = ISFParameters(params=params)
+
+    all_amplitudes = get_all_amplitudes(isf_params=isf_params, results=results)
+
+    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
 
     plot_isf(
-        x=amplitudes, t=params.times, ax=ax1, delta_k_index=50, isf_params=isf_params
+        x=all_amplitudes,
+        t=params.times,
+        ax=axes[0],
+        delta_k_index=50,
+        isf_params=isf_params,
     )
 
-    dephasing_rates = get_dephasing_rates(amplitudes=amplitudes, t=params.times)
+    dephasing_rates = get_dephasing_rates(amplitudes=all_amplitudes, t=params.times)
 
     plot_dephasing_rates(
         dephasing_rates=dephasing_rates,
         delta_k=isf_params.delta_k_array[:, 0],
-        ax=ax2,
+        ax=axes[1],
     )
 
-    timesteps = np.arange(1, 12001)[::100]
+    plot_mean_jump_rates(results=results, ax=axes[2])
 
-    anim = animate_particle_positions_square(
-        all_positions=positions,
-        lattice_dimension=params.lattice_dimension,
+    timesteps = np.arange(1, params.n_timesteps, 20, dtype=int)
+
+    anim = animate_particle_positions(
+        all_positions=results[0].positions,
+        lattice_dimension=(100, 100),
+        lattice_vectors=(np.array([1, 0]), np.array([0, 1])),
         timesteps=timesteps,
-        lattice_spacing=2.5,
     )
 
     plt.show()

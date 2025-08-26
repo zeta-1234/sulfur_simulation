@@ -6,120 +6,62 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib import animation
 
+from sulfur_simulation.scattering_calculation import JUMP_DIRECTIONS, SimulationResult
+from sulfur_simulation.util import get_figure
+
 if TYPE_CHECKING:
+    from matplotlib.axes import Axes
     from matplotlib.collections import PathCollection
-    from matplotlib.figure import Figure
+    from matplotlib.figure import Figure, SubFigure
+    from numpy.typing import NDArray
 
     from sulfur_simulation.scattering_calculation import SimulationParameters
 
 
-def animate_particle_positions_square(
-    all_positions: np.ndarray[tuple[int, int, int], np.dtype[np.bool_]],
+def animate_particle_positions(
+    all_positions: NDArray[np.bool_],
     lattice_dimension: tuple[int, int],
-    timesteps: np.ndarray,
-    lattice_spacing: float = 2.5,
+    timesteps: NDArray[np.float64],
+    lattice_vectors: tuple[NDArray[np.float64], NDArray[np.float64]],
 ) -> animation.FuncAnimation:
-    """Animate particle positions with lattice sites as blue stars."""
+    """Animate particle positions on a skewed lattice defined by two lattice vectors."""
+    n_cols, n_rows = lattice_dimension
+    v0, v1 = lattice_vectors
+
+    lattice_coords = np.array(
+        [col * v0 + row * v1 for row in range(n_rows) for col in range(n_cols)]
+    )
+    lattice_x: NDArray[np.float64] = lattice_coords[:, 0]
+    lattice_y: NDArray[np.float64] = lattice_coords[:, 1]
+
     fig, ax = plt.subplots(figsize=(6, 6))
-    ax.set_xlim(-lattice_spacing, lattice_dimension[0] * lattice_spacing)
-    ax.set_ylim(-lattice_spacing, lattice_dimension[1] * lattice_spacing)
     ax.set_aspect("equal")
     ax.set_title("Particle Simulation")
 
-    # Draw lattice sites as blue stars once
-    lattice_x, lattice_y = np.meshgrid(
-        np.arange(lattice_dimension[0]) * lattice_spacing,
-        np.arange(lattice_dimension[1]) * lattice_spacing,
-    )
-    ax.scatter(
-        lattice_x.ravel(),
-        lattice_y.ravel(),
-        color="aqua",
-        marker=".",
-        s=5,
-        zorder=0,
-        label="Sites",
-    )
+    ax.set_xlim(lattice_x.min() - 1, lattice_x.max() + 1)
+    ax.set_ylim(lattice_y.min() - 1, lattice_y.max() + 1)
+    ax.set_xlabel("x distance")
+    ax.set_ylabel("y distance")
 
-    # Particle scatter on top of lattice stars
-    particle_scatter: PathCollection = ax.scatter(
-        [], [], color="red", s=20, edgecolors="black", zorder=1
-    )
-    ax.legend(["Sites", "Particles"], loc="lower right")
-
-    def update(frame: int) -> tuple[PathCollection]:
-        occupancy = all_positions[frame]
-        rows, cols = np.nonzero(occupancy)
-
-        # Convert lattice indices to physical positions
-        x = cols * lattice_spacing
-        y = rows * lattice_spacing
-
-        particle_scatter.set_offsets(np.c_[x, y])
-        ax.set_title(f"Timestep: {frame}")
-        return (particle_scatter,)
-
-    return animation.FuncAnimation(
-        fig,
-        update,
-        frames=timesteps,
-        interval=5000 / len(timesteps),
-        blit=False,
-        repeat=True,
-    )
-
-
-def animate_particle_positions_hexagonal(
-    all_positions: np.ndarray,  # shape (timesteps, rows, cols), dtype=bool
-    lattice_dimension: tuple[int, int],
-    timesteps: np.ndarray,
-    lattice_spacing: float = 2.5,
-) -> animation.FuncAnimation:
-    """Animate particle positions on a hexagonal close-packed (HCP) lattice."""
-    fig, ax = plt.subplots(figsize=(6, 6))
-
-    dx = lattice_spacing
-    dy = lattice_spacing * np.sqrt(3) / 2
-
-    # Precompute lattice coordinates
-    lattice_x = np.zeros(lattice_dimension[0] * lattice_dimension[1])
-    lattice_y = np.zeros_like(lattice_x)
-
-    index = 0
-    for row in range(lattice_dimension[1]):
-        for col in range(lattice_dimension[0]):
-            lattice_x[index] = col * dx + (dx / 2) * row
-            lattice_y[index] = row * dy
-            index += 1
-
-    # Set axis limits based on lattice extent
-    ax.set_xlim(lattice_x.min() - dx, lattice_x.max() + dx)
-    ax.set_ylim(lattice_y.min() - dy, lattice_y.max() + dy)
-    ax.set_aspect("equal")
-
-    # Hide tick labels but keep axis lines
-    ax.set_xticks([])
-    ax.set_yticks([])
-
-    # Draw lattice sites
     ax.scatter(
         lattice_x, lattice_y, color="aqua", marker=".", s=5, zorder=0, label="Sites"
     )
 
-    # Particle scatter
     particle_scatter: PathCollection = ax.scatter(
-        [], [], color="red", s=20, edgecolors="black", zorder=1
+        [], [], color="red", s=20, edgecolors="black", zorder=1, label="Particles"
     )
-
-    # Legend
-    ax.legend(["Sites", "Particles"], loc="lower right")
+    ax.legend(loc="lower right")
 
     def update(frame: int) -> tuple[PathCollection]:
         occupancy = all_positions[frame]
         rows, cols = np.nonzero(occupancy)
-        x = cols * dx + (dx / 2) * rows
-        y = rows * dy
-        particle_scatter.set_offsets(np.c_[x, y])
+        coords = np.array(
+            [col * v0 + row * v1 for row, col in zip(rows, cols, strict=False)]
+        )
+        if coords.size > 0:
+            particle_scatter.set_offsets(coords)
+        else:
+            particle_scatter.set_offsets(np.empty((0, 2)))
         ax.set_title(f"Timestep: {frame}")
         return (particle_scatter,)
 
@@ -159,32 +101,28 @@ def get_timeframe_str(
     return "\n".join(lines)
 
 
-def create_jump_plot(jump_counter: np.ndarray, sampled_jumps: np.ndarray) -> Figure:
+def plot_mean_jump_rates(
+    results: list[SimulationResult], ax: Axes | None = None
+) -> tuple[Figure | SubFigure, Axes]:
     """Plot attempted and successful jump counts."""
-    delta = np.array(
-        [
-            (-1, -1),
-            (-1, 0),
-            (-1, 1),
-            (0, -1),
-            (0, 0),
-            (0, 1),
-            (1, -1),
-            (1, 0),
-            (1, 1),
-        ]
-    )
+    delta = JUMP_DIRECTIONS
     labels = [f"{d}" for d in delta]
 
-    print(f"Attempted jumps: {sampled_jumps}")  # noqa: T201
-    print(f"Successful jumps: {jump_counter}")  # noqa: T201
-
-    indices = np.arange(len(jump_counter))
     width = 0.35
+    fig, ax = get_figure(ax=ax)
 
-    fig, ax = plt.subplots()
-    ax.bar(indices - width / 2, jump_counter, width, label="Successful jumps")
-    ax.bar(indices + width / 2, sampled_jumps, width, label="Attempted jumps")
+    jump_counts = np.array([result.jump_count for result in results])
+    mean_jump_count = jump_counts.mean(axis=0)
+
+    indices: NDArray[np.int_] = np.arange(mean_jump_count.shape[0], dtype=np.int_)
+    ax.bar(indices - width / 2, mean_jump_count, width, label="Successful jumps")
+    attempted_jump_count = np.array(
+        [result.attempted_jump_counter for result in results]
+    )
+    mean_attempted_jump_count = attempted_jump_count.mean(axis=0)
+    ax.bar(
+        indices + width / 2, mean_attempted_jump_count, width, label="Attempted jumps"
+    )
     ax.set_xlabel("Direction (delta row, delta col)")
     ax.set_ylabel("Count")
     ax.set_xticks(indices)
@@ -195,4 +133,4 @@ def create_jump_plot(jump_counter: np.ndarray, sampled_jumps: np.ndarray) -> Fig
             label.set_color("gray")
 
     ax.legend()
-    return fig
+    return fig, ax
