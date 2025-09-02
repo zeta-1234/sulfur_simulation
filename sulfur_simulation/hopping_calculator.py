@@ -102,25 +102,15 @@ class BaseRateHoppingCalculator(HoppingCalculator):
         self._temperature = temperature
         self._lattice_directions = lattice_directions
 
-    @property
-    def normalised_directions(self) -> tuple[np.ndarray, np.ndarray]:
-        """Normalise lattice directions.
-
-        Raises
-        ------
-        ValueError
-            If the lattice vectors are not parallel.
-        ValueError
-            If the lattice vectors are zero.
-        """
         a, b = self._lattice_directions
         if np.isclose(a[0] * b[1] - a[1] * b[0], 0.0):
             msg = "Lattice vectors cannot be parallel."
             raise ValueError(msg)
-        if np.linalg.norm(a) == 0 or np.linalg.norm(b) == 0:
-            msg = "Lattice vectors cannot be zero."
-            raise ValueError(msg)
 
+    @property
+    def normalized_directions(self) -> tuple[np.ndarray, np.ndarray]:
+        """Normalize lattice directions."""
+        a, b = self._lattice_directions
         return a / np.linalg.norm(a), b / np.linalg.norm(b)
 
     @override
@@ -208,18 +198,23 @@ class InteractingHoppingCalculator(BaseRateHoppingCalculator):
         *,
         baserate: BaseRate,
         temperature: float,
-        lattice_properties: tuple[float, np.ndarray, np.ndarray],
+        lattice_directions: tuple[np.ndarray, np.ndarray],
         interaction: Callable[[float], float],
         cutoff_potential: float = 1.6e-22,
     ) -> None:
         super().__init__(
             baserate=baserate,
             temperature=temperature,
-            lattice_directions=(lattice_properties[1], lattice_properties[2]),
+            lattice_directions=(lattice_directions[0], lattice_directions[1]),
         )
-        self._lattice_spacing = lattice_properties[0]
+        self._lattice_spacing = float(np.linalg.norm(lattice_directions[0]))
         self._interaction = interaction
         self.cutoff_potential = cutoff_potential
+
+        a, b = self._lattice_directions
+        if np.linalg.norm(a) != np.linalg.norm(b):
+            msg = "Lattice vectors should have same magnitude"
+            raise ValueError(msg)
 
     def _build_lj_lookup_table(
         self, cutoff_radius: int
@@ -232,8 +227,8 @@ class InteractingHoppingCalculator(BaseRateHoppingCalculator):
                     continue
 
                 displacement = (
-                    dx * self.normalised_directions[0]
-                    + dy * self.normalised_directions[1]
+                    dx * self.normalized_directions[0]
+                    + dy * self.normalized_directions[1]
                 )
                 r = float(self._lattice_spacing * np.linalg.norm(displacement))
 

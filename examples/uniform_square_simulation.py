@@ -67,7 +67,7 @@ if __name__ == "__main__":
 
     anim = animate_particle_positions(
         all_positions=results[0].positions,
-        lattice_dimension=(100, 100),
+        lattice_dimension=params.lattice_dimension,
         lattice_vectors=(np.array([1, 0]), np.array([0, 1])),
         timesteps=timesteps,
     )

@@ -37,8 +37,8 @@
         "pickler",
         "savez",
         "unpickler",
-        "normalise",
-        "normalised",
+        "normalize",
+        "normalized",
         "xtick",
         "ytick"
     ],

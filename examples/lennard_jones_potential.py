@@ -34,7 +34,7 @@ if __name__ == "__main__":
         hopping_calculator=InteractingHoppingCalculator(
             baserate=SquareBaseRate(straight_rate=0.01, diagonal_rate=0.002),
             temperature=200,
-            lattice_properties=(2.5, np.array([1, 0]), np.array([0, 1])),
+            lattice_directions=(np.array([2.5, 0]), np.array([0, 2.5])),
             interaction=get_lennard_jones_potential(sigma=2.55, epsilon=0.03 * 1.6e-19),
         ),
     )
@@ -69,7 +69,7 @@ if __name__ == "__main__":
 
     anim = animate_particle_positions(
         all_positions=results[0].positions,
-        lattice_dimension=(100, 100),
+        lattice_dimension=params.lattice_dimension,
         lattice_vectors=(np.array([1, 0]), np.array([0, 1])),
         timesteps=timesteps,
     )

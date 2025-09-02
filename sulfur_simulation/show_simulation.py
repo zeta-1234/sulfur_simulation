@@ -114,7 +114,7 @@ def plot_mean_jump_rates(
     jump_counts = np.array([result.jump_count for result in results])
     mean_jump_count = jump_counts.mean(axis=0)
 
-    indices: NDArray[np.int_] = np.arange(mean_jump_count.shape[0], dtype=np.int_)
+    indices = np.arange(mean_jump_count.shape[0], dtype=np.int_)
     ax.bar(indices - width / 2, mean_jump_count, width, label="Successful jumps")
     attempted_jump_count = np.array(
         [result.attempted_jump_counter for result in results]
