@@ -7,7 +7,6 @@ import numpy as np
 
 from sulfur_simulation.hopping_calculator import (
     HexagonalBaseRate,
-    InteractingHoppingCalculator,
     get_lennard_jones_potential,
 )
 from sulfur_simulation.isf import (
@@ -26,13 +25,17 @@ from sulfur_simulation.show_simulation import (
     plot_mean_jump_rates,
 )
 from sulfur_simulation.sulfur_data import DEFECT_LOCATIONS
+from sulfur_simulation.sulfur_nickel_calculator import (
+    SulfurNickelData,
+    SulfurNickelHoppingCalculator,
+)
 
 if __name__ == "__main__":
     params = SimulationParameters(
         n_timesteps=12000,
         lattice_dimension=(100, 100),
         n_particles=500,
-        hopping_calculator=InteractingHoppingCalculator(
+        hopping_calculator=SulfurNickelHoppingCalculator(
             baserate=HexagonalBaseRate(rate=0.01),
             temperature=200,
             lattice_directions=(
@@ -40,10 +43,11 @@ if __name__ == "__main__":
                 2.5 * np.array([0.5, np.sqrt(3) / 2]),
             ),
             interaction=get_lennard_jones_potential(sigma=2.45, epsilon=0.03 * 1.6e-19),
+            sulfur_nickel_data=SulfurNickelData(max_layer_size=7),
         ),
     )
 
-    results = run_simulation(n_runs=3, params=params)
+    results = run_simulation(n_runs=1, params=params)
 
     isf_params = ISFParameters(params=params)
 
@@ -69,7 +73,7 @@ if __name__ == "__main__":
 
     plot_mean_jump_rates(results=results, ax=axes[2])
 
-    timesteps = np.arange(1, params.n_timesteps, 20, dtype=int)
+    timesteps = np.arange(1, params.n_timesteps, 10, dtype=int)
 
     anim = animate_particle_positions(
         all_positions=results[0].positions,

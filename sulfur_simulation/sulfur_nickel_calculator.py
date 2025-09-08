@@ -1,0 +1,297 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, override
+
+from sulfur_simulation.hopping_calculator import BaseRate, InteractingHoppingCalculator
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+import warnings
+
+import numpy as np
+from scipy.constants import Boltzmann  # type: ignore[reportMissingTypeStubs]
+
+from sulfur_simulation.scattering_calculation import JUMP_DIRECTIONS
+from sulfur_simulation.sulfur_data import (
+    DEFECT_LOCATIONS,
+    blocked_hcp_sites,
+    hcp_horizontal_vector,
+    hcp_vertical_vector,
+    relative_tile_positions,
+)
+
+
+@dataclass(kw_only=True, frozen=True)
+class SulfurNickelData:
+    """Parameters for the Sulfur on Nickel simulation."""
+
+    max_layer_size: int
+    "The maximum dimension a sulfur structure can grow to"
+
+    def __post_init__(self) -> None:
+        if self.max_layer_size % 2 == 0:
+            msg = "max_layer_size must be an odd integer."
+            raise ValueError(msg)
+
+    @property
+    def layer_indices(self) -> np.ndarray:
+        """The indices of a sulfur layer."""
+        layer_indices = np.zeros(
+            (self.max_layer_size, self.max_layer_size), dtype=np.int32
+        )
+
+        tile_horizontal_vector = np.array([1, -3])
+        tile_vertical_vector = np.array([3, 1])
+
+        n_tiles = int((self.max_layer_size - 1) / 6) + 1
+        for x_value in range(-n_tiles, n_tiles):
+            for y_value in range(-n_tiles, n_tiles):
+                for tile_index, tile_position in relative_tile_positions.items():
+                    position = (
+                        x_value * tile_horizontal_vector
+                        + y_value * tile_vertical_vector
+                        + tile_position
+                    )
+                    if (
+                        np.abs(position[0]) <= (self.max_layer_size - 1) / 2
+                        and np.abs(position[1]) <= (self.max_layer_size - 1) / 2
+                    ):
+                        layer_indices[int(position[0] + (self.max_layer_size - 1) / 2)][
+                            int(position[1] + (self.max_layer_size - 1) / 2)
+                        ] = int(tile_index)
+
+        return layer_indices
+
+    @property
+    def layer_indices_mirrored(self) -> np.ndarray:
+        """The mirrored indices of a sulfur layer."""
+        return self.layer_indices[:, ::-1]
+
+    @property
+    def sulfur_layers(self) -> np.ndarray:
+        """Generate empty sulfur layers."""
+        return np.zeros(
+            (len(DEFECT_LOCATIONS), self.max_layer_size, self.max_layer_size),
+            dtype=np.bool_,
+        )
+
+    @property
+    def sulfur_layers_data(self) -> np.ndarray:
+        """Generate data for sulfur layers in format (center position, orientation)."""
+        dtype = np.dtype([("position", np.int32, (2,)), ("orientation", np.int32)])
+        layer_data = np.empty((len(DEFECT_LOCATIONS)), dtype=dtype)
+        rng = np.random.default_rng()
+        for i, start_position in enumerate(DEFECT_LOCATIONS):
+            layer_data[i] = (start_position, int(rng.integers(0, 6)))
+        return layer_data
+
+
+class SulfurNickelHoppingCalculator(InteractingHoppingCalculator):
+    """Hopping Calculator for sulfur on nickel."""
+
+    def __init__(  # noqa: PLR0913
+        self,
+        *,
+        baserate: BaseRate,
+        temperature: float,
+        lattice_directions: tuple[np.ndarray, np.ndarray],
+        interaction: Callable[[float], float],
+        cutoff_potential: float = 1.6e-22,
+        sulfur_nickel_data: SulfurNickelData,
+    ) -> None:
+        super().__init__(
+            baserate=baserate,
+            temperature=temperature,
+            lattice_directions=lattice_directions,
+            interaction=interaction,
+            cutoff_potential=cutoff_potential,
+        )
+        self._defect_indices = tuple(DEFECT_LOCATIONS.T)
+        self._layer_data = sulfur_nickel_data.sulfur_layers_data
+        self._layers = sulfur_nickel_data.sulfur_layers
+        self._layer_indices = sulfur_nickel_data.layer_indices
+        self._layer_indices_mirrored = sulfur_nickel_data.layer_indices_mirrored
+
+    @override
+    def _get_energy_landscape(
+        self, positions: np.ndarray[tuple[int, int], np.dtype[np.bool_]]
+    ) -> np.ndarray[tuple[int, int], np.dtype[np.float64]]:
+        energies = super()._get_energy_landscape(positions)
+        energies[self._defect_indices] -= 1.6e-20
+        return energies
+
+    @override
+    def get_hopping_probabilities(  # noqa: PLR0914
+        self,
+        positions: np.ndarray[tuple[int, int], np.dtype[np.bool_]],
+        layers: np.ndarray | None,
+    ) -> np.ndarray[tuple[int, int], np.dtype[np.floating]]:
+        #  TODO: need checks with layers:  # noqa: FIX002
+        #  layers must be filled in order, starting at the defect
+        #  if a particle near possible layer spots, check to see if it moves into those layers first,
+        #  then return probabilities of moving to other non-layer spots if not
+        #  if a particle exists in a higher layer that blocks the spot, set probabilities to zero
+        #  for speed, maybe keep an array of positions which are blocked by higher layers,
+        #  and positions which can result in jumps to higher layers
+
+        energies = self._get_energy_landscape(positions=positions)
+
+        rows, cols = np.nonzero(positions)
+
+        delta = JUMP_DIRECTIONS
+        beta = 1 / (2 * Boltzmann * self._temperature)
+        max_exp_arg = np.log(1 / np.min(self._baserate.grid[self._baserate.grid > 0]))
+
+        # Compute energy differences to neighbors
+        neighbor_rows = (rows[:, None] + delta[:, 0]) % positions.shape[0]
+        neighbor_cols = (cols[:, None] + delta[:, 1]) % positions.shape[1]
+
+        energy_difference = (
+            energies[neighbor_rows, neighbor_cols] - energies[rows, cols][:, None]
+        )
+
+        exponent = np.clip(-beta * energy_difference, a_min=None, a_max=max_exp_arg)
+        if np.any(np.isclose(exponent, max_exp_arg)):
+            warnings.warn(
+                "Some energy differences are too large, the resulting distribution may be inaccurate.",
+                stacklevel=2,
+            )
+
+        rates = np.exp(exponent) * self._baserate.grid
+
+        if layers is not None:
+            blocked_sites = _get_blocked_sites(
+                layers=layers,
+                layer_data=self._layer_data,
+                layer_indices=self._layer_indices,
+                layer_indices_mirrored=self._layer_indices_mirrored,
+            )
+        else:
+            blocked_sites = None
+
+        if blocked_sites is not None and len(blocked_sites) > 0:
+            blocked_mask = np.zeros_like(positions, dtype=bool)
+            blocked_mask[blocked_sites[:, 0], blocked_sites[:, 1]] = True
+
+            blocked_neighbors = blocked_mask[neighbor_rows, neighbor_cols]
+            rates[blocked_neighbors] = 0.0
+
+        row_sums = rates.sum(axis=1)
+        over_rows = row_sums > 1.0
+        rates[over_rows] /= row_sums[over_rows, None]
+
+        warning_threshold = 0.5
+        if np.any(row_sums > warning_threshold):
+            warnings.warn("Some probabilities exceed 0.5", stacklevel=2)
+
+        # Stationary probability
+        rates[:, 4] = 1 - rates.sum(axis=1)
+
+        return np.clip(rates, 0.0, 1.0)
+
+
+def _get_blocked_sites(
+    layers: np.ndarray,
+    layer_data: np.ndarray,
+    layer_indices: np.ndarray,
+    layer_indices_mirrored: np.ndarray,
+) -> np.ndarray:
+    """Generate a list of inaccessible base sites due to filled layers."""
+    blocked_sites = []
+    layer_indices_dict = {
+        0: layer_indices,
+        1: layer_indices_mirrored,
+    }
+
+    tile_horizontal_vector = {
+        0: np.array([1, -3]),
+        1: np.array([1, 3]),
+    }
+
+    tile_vertical_vector = {0: np.array([3, 1]), 1: np.array([3, -1])}
+
+    n_tiles = int((len(layer_indices) - 1) // 6) + 1
+
+    for i in range(len(layers)):
+        orientation = layer_data[i][1]
+        blocked_site_dictionary = blocked_hcp_sites[orientation]
+
+        # loop over each tile, and each position within the tiles
+        for x_value in range(-n_tiles, n_tiles):
+            for y_value in range(-n_tiles, n_tiles):
+                for tile_position in relative_tile_positions.values():
+                    position_sulfur_space = (
+                        x_value * tile_horizontal_vector[orientation % 2]
+                        + y_value * tile_vertical_vector[orientation % 2]
+                        + tile_position
+                    )
+
+                    # check the position is inside the layer, and if a particle is there
+                    if (
+                        np.abs(position_sulfur_space[0]) <= (layers.shape[1] - 1) // 2
+                        and np.abs(position_sulfur_space[1])
+                        <= (layers.shape[1] - 1) // 2
+                    ) and layers[i][
+                        int(position_sulfur_space[0] + (layers.shape[1] - 1) // 2)
+                    ][int(position_sulfur_space[1] + (layers.shape[1] - 1) // 2)]:
+                        #  update blocked site list using dictionary
+                        blocked_sites.extend(
+                            layer_data[i][0]
+                            + x_value * hcp_horizontal_vector[orientation]
+                            + y_value * hcp_vertical_vector[orientation]
+                            + tile_vector
+                            for tile_vector in blocked_site_dictionary[
+                                int(
+                                    layer_indices_dict[orientation % 2][
+                                        int(
+                                            position_sulfur_space[0]
+                                            + (layers.shape[1] - 1) // 2
+                                        )
+                                    ][
+                                        int(
+                                            position_sulfur_space[1]
+                                            + (layers.shape[1] - 1) // 2
+                                        )
+                                    ]
+                                )
+                            ]
+                        )
+    # remove duplicate entries
+    return np.unique(np.array(blocked_sites, dtype=int), axis=0)
+
+
+testclass = SulfurNickelData(max_layer_size=5)
+
+testlayers = np.array(
+    [
+        [
+            [False, False, False, False, False],
+            [False, False, True, False, False],
+            [False, False, False, False, False],
+            [False, False, False, False, True],
+            [False, False, False, False, False],
+        ],
+        [
+            [False, False, False, False, False],
+            [False, False, False, False, False],
+            [False, False, True, False, False],
+            [False, False, False, False, False],
+            [False, False, False, False, False],
+        ],
+    ]
+)
+
+testlayerdata = np.array(
+    [([10, 10], 0), ([40, 40], 4)],
+    dtype=[("position", "<i4", (2,)), ("orientation", "<i4")],
+)
+
+print(  # noqa: T201
+    _get_blocked_sites(
+        layers=testlayers,
+        layer_data=testlayerdata,
+        layer_indices=testclass.layer_indices,
+        layer_indices_mirrored=testclass.layer_indices_mirrored,
+    )
+)

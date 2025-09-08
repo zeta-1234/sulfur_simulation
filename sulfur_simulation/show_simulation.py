@@ -23,6 +23,7 @@ def animate_particle_positions(
     lattice_dimension: tuple[int, int],
     timesteps: NDArray[np.float64],
     lattice_vectors: tuple[NDArray[np.float64], NDArray[np.float64]],
+    defect_locations: NDArray[np.integer] | None = None,
 ) -> animation.FuncAnimation:
     """Animate particle positions on a skewed lattice defined by two lattice vectors."""
     n_cols, n_rows = lattice_dimension
@@ -47,8 +48,22 @@ def animate_particle_positions(
         lattice_x, lattice_y, color="aqua", marker=".", s=5, zorder=0, label="Sites"
     )
 
+    if defect_locations is not None and defect_locations.size > 0:
+        defect_coords = np.array([col * v0 + row * v1 for row, col in defect_locations])
+        ax.scatter(
+            defect_coords[:, 0],
+            defect_coords[:, 1],
+            facecolors="none",
+            edgecolors="gray",
+            marker="o",
+            s=40,
+            linewidths=2.0,
+            zorder=2,
+            label="Defects",
+        )
+
     particle_scatter: PathCollection = ax.scatter(
-        [], [], color="red", s=20, edgecolors="black", zorder=1, label="Particles"
+        [], [], color="red", s=20, edgecolors="black", zorder=3, label="Particles"
     )
     ax.legend(loc="lower right")
 
