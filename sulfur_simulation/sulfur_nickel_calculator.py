@@ -167,6 +167,12 @@ class SulfurNickelHoppingCalculator(InteractingHoppingCalculator):
                 layer_indices=self._layer_indices,
                 layer_indices_mirrored=self._layer_indices_mirrored,
             )
+            _ = _get_layer_access_sites(
+                layers=layers,
+                layer_data=self._layer_data,
+                layer_indices=self._layer_indices,
+                layer_indices_mirrored=self._layer_indices_mirrored,
+            )
         else:
             blocked_sites = None
 
@@ -259,6 +265,49 @@ def _get_blocked_sites(
                         )
     # remove duplicate entries
     return np.unique(np.array(blocked_sites, dtype=int), axis=0)
+
+
+def _get_layer_access_sites(
+    layers: np.ndarray,
+    layer_data: np.ndarray,
+    layer_indices: np.ndarray,
+    layer_indices_mirrored: np.ndarray,
+) -> np.ndarray:
+    neighbour_offsets = [
+        (-1, 0),
+        (1, 0),
+        (0, -1),
+        (0, 1),
+    ]
+
+    new_layers = np.copy(layers)
+    num_layers, num_rows, num_columns = layers.shape
+
+    for dz in range(num_layers):
+        true_positions = np.argwhere(layers[dz])
+
+        # If the layer is completely empty → set center to True
+        if true_positions.size == 0:
+            center = (num_rows // 2, num_columns // 2)
+            new_layers[dz, center] = True
+            continue
+
+        for row, column in true_positions:
+            for dr, dc in neighbour_offsets:
+                rr = row + dr
+                cc = column + dc
+                if 0 <= rr < num_rows and 0 <= cc < num_columns:
+                    new_layers[dz, rr, cc] = True
+
+        # clear original sites
+        new_layers[dz, layers[dz]] = False
+
+    return _get_blocked_sites(
+        layers=new_layers,
+        layer_data=layer_data,
+        layer_indices=layer_indices,
+        layer_indices_mirrored=layer_indices_mirrored,
+    )
 
 
 testclass = SulfurNickelData(max_layer_size=5)
