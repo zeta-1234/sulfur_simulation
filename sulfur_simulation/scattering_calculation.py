@@ -159,7 +159,7 @@ def _run_single_simulation(
 
     for i in trange(1, params.n_timesteps):
         jump_probabilities = params.hopping_calculator.get_hopping_probabilities(
-            all_positions[i - 1]
+            all_positions[i - 1], layers=None
         )
 
         _update_result(

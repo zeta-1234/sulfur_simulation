@@ -84,7 +84,9 @@ class HoppingCalculator(ABC):
     """Abstract base class for calculating hopping probabilities."""
 
     @abstractmethod
-    def get_hopping_probabilities(self, positions: np.ndarray) -> np.ndarray:
+    def get_hopping_probabilities(
+        self, positions: np.ndarray, layers: np.ndarray | None
+    ) -> np.ndarray:
         """Get hopping probabilities."""
 
 
@@ -115,7 +117,9 @@ class BaseRateHoppingCalculator(HoppingCalculator):
 
     @override
     def get_hopping_probabilities(
-        self, positions: np.ndarray[tuple[int, int], np.dtype[np.bool_]]
+        self,
+        positions: np.ndarray[tuple[int, int], np.dtype[np.bool_]],
+        layers: np.ndarray | None,
     ) -> np.ndarray[tuple[int, int], np.dtype[np.floating]]:
         energies = self._get_energy_landscape(positions=positions)
         rows, cols = np.nonzero(positions)

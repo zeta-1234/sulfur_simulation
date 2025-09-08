@@ -47,7 +47,7 @@ if __name__ == "__main__":
         ),
     )
 
-    results = run_simulation(n_runs=1, params=params)
+    results = run_simulation(n_runs=5, params=params)
 
     isf_params = ISFParameters(params=params)
 
@@ -73,7 +73,7 @@ if __name__ == "__main__":
 
     plot_mean_jump_rates(results=results, ax=axes[2])
 
-    timesteps = np.arange(1, params.n_timesteps, 10, dtype=int)
+    timesteps = np.arange(1, params.n_timesteps, 20, dtype=int)
 
     anim = animate_particle_positions(
         all_positions=results[0].positions,
