@@ -398,3 +398,17 @@ relative_tile_positions = {
     8: np.array([2, -2]),
     9: np.array([3, -2]),
 }
+
+JUMP_DIRECTIONS = np.array(
+    [
+        (-1, -1),
+        (-1, 0),
+        (-1, 1),
+        (0, -1),
+        (0, 0),
+        (0, 1),
+        (1, -1),
+        (1, 0),
+        (1, 1),
+    ]
+)

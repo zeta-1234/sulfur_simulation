@@ -12,9 +12,9 @@ import warnings
 import numpy as np
 from scipy.constants import Boltzmann  # type: ignore[reportMissingTypeStubs]
 
-from sulfur_simulation.scattering_calculation import JUMP_DIRECTIONS
 from sulfur_simulation.sulfur_data import (
     DEFECT_LOCATIONS,
+    JUMP_DIRECTIONS,
     blocked_hcp_sites,
     hcp_horizontal_vector,
     hcp_vertical_vector,
@@ -27,7 +27,9 @@ class SulfurNickelData:
     """Parameters for the Sulfur on Nickel simulation."""
 
     max_layer_size: int
-    "The maximum dimension a sulfur structure can grow to"
+    "The maximum dimension a sulfur structure can grow to."
+    layer_energy: float = -7e-21
+    "The potential energy of empty, available spaces in the layers."
 
     def __post_init__(self) -> None:
         if self.max_layer_size % 2 == 0:
@@ -35,7 +37,7 @@ class SulfurNickelData:
             raise ValueError(msg)
 
     @property
-    def layer_indices(self) -> np.ndarray:
+    def layer_tiling_indices(self) -> np.ndarray:
         """The indices of a sulfur layer."""
         layer_indices = np.zeros(
             (self.max_layer_size, self.max_layer_size), dtype=np.int32
@@ -64,9 +66,9 @@ class SulfurNickelData:
         return layer_indices
 
     @property
-    def layer_indices_mirrored(self) -> np.ndarray:
+    def layer_tiling_indices_mirrored(self) -> np.ndarray:
         """The mirrored indices of a sulfur layer."""
-        return self.layer_indices[:, ::-1]
+        return self.layer_tiling_indices[:, ::-1]
 
     @property
     def initial_sulfur_layers(self) -> np.ndarray:
@@ -108,10 +110,13 @@ class SulfurNickelHoppingCalculator(InteractingHoppingCalculator):
             cutoff_potential=cutoff_potential,
         )
         self._defect_indices = tuple(DEFECT_LOCATIONS.T)
+        self.sulfur_nickel_data = sulfur_nickel_data
         self._layer_data = sulfur_nickel_data.sulfur_layers_data
-        self._layers = sulfur_nickel_data.initial_sulfur_layers
-        self._layer_indices = sulfur_nickel_data.layer_indices
-        self._layer_indices_mirrored = sulfur_nickel_data.layer_indices_mirrored
+        self._initial_layers = sulfur_nickel_data.initial_sulfur_layers
+        self._layer_tiling_indices = sulfur_nickel_data.layer_tiling_indices
+        self._layer_tiling_indices_mirrored = (
+            sulfur_nickel_data.layer_tiling_indices_mirrored
+        )
 
         self._cached_layers: np.ndarray | None = None
         self._cached_blocked_sites: np.ndarray = np.empty((0, 2), dtype=int)
@@ -125,26 +130,18 @@ class SulfurNickelHoppingCalculator(InteractingHoppingCalculator):
         energies[self._defect_indices] -= 1.6e-20
         return energies
 
-    @override
-    def get_hopping_probabilities(  # noqa: PLR0914
+    def _get_rates(
         self,
         positions: np.ndarray[tuple[int, int], np.dtype[np.bool_]],
-        layers: np.ndarray | None,
-    ) -> np.ndarray[tuple[int, int], np.dtype[np.floating]]:
-        #  TODO: need checks with layers:  # noqa: FIX002
-        #  layers must be filled in order, starting at the defect
-        #  if a particle near possible layer spots, check to see if it moves into those layers first,
-        #  then return probabilities of moving to other non-layer spots if not
-        #  if a particle exists in a higher layer that blocks the spot, set probabilities to zero
-        #  for speed, maybe keep an array of positions which are blocked by higher layers,
-        #  and positions which can result in jumps to higher layers
-        if layers is None:
-            layers = self._layers
+        layer_access_sites: np.ndarray,
+    ) -> np.ndarray:
+        _ = layer_access_sites
         energies = self._get_energy_landscape(positions=positions)
 
         rows, cols = np.nonzero(positions)
 
         delta = JUMP_DIRECTIONS
+
         beta = 1 / (2 * Boltzmann * self._temperature)
         max_exp_arg = np.log(1 / np.min(self._baserate.grid[self._baserate.grid > 0]))
 
@@ -163,27 +160,58 @@ class SulfurNickelHoppingCalculator(InteractingHoppingCalculator):
                 stacklevel=2,
             )
 
-        rates = np.exp(exponent) * self._baserate.grid
+        return np.exp(exponent) * self._baserate.grid
 
+    def _get_blocked_and_available_sites(
+        self,
+        layers: np.ndarray,
+        layer_data: np.ndarray,
+        layer_indices: np.ndarray,
+        layer_indices_mirrored: np.ndarray,
+    ) -> tuple[np.ndarray, np.ndarray]:
         if self._cached_layers is None or not np.array_equal(
             layers, self._cached_layers
         ):
             self._cached_blocked_sites = _get_blocked_sites(
                 layers=layers,
-                layer_data=self._layer_data,
-                layer_indices=self._layer_indices,
-                layer_indices_mirrored=self._layer_indices_mirrored,
+                layer_data=layer_data,
+                layer_indices=layer_indices,
+                layer_indices_mirrored=layer_indices_mirrored,
             )
             self._cached_layer_access_sites = _get_layer_access_sites(
                 layers=layers,
-                layer_data=self._layer_data,
-                layer_indices=self._layer_indices,
-                layer_indices_mirrored=self._layer_indices_mirrored,
+                layer_data=layer_data,
+                layer_indices=layer_indices,
+                layer_indices_mirrored=layer_indices_mirrored,
             )
 
             self._cached_layers = np.copy(layers)
 
-        blocked_sites = self._cached_blocked_sites
+        return (self._cached_blocked_sites[:, :2], self._cached_layer_access_sites)
+
+    @override
+    def get_hopping_probabilities_and_destinations(
+        self,
+        positions: np.ndarray[tuple[int, int], np.dtype[np.bool_]],
+        layers: np.ndarray | None,
+    ) -> np.ndarray[tuple[int, int], np.dtype[np.floating]]:
+        rows, cols = np.nonzero(positions)
+        delta = JUMP_DIRECTIONS
+        neighbor_rows = (rows[:, None] + delta[:, 0]) % positions.shape[0]
+        neighbor_cols = (cols[:, None] + delta[:, 1]) % positions.shape[1]
+
+        assert layers is not None
+
+        blocked_sites, layer_access_sites = self._get_blocked_and_available_sites(
+            layers=layers,
+            layer_data=self._layer_data,
+            layer_indices=self._layer_tiling_indices,
+            layer_indices_mirrored=self._layer_tiling_indices_mirrored,
+        )
+
+        rates = self._get_rates(
+            positions=positions, layer_access_sites=layer_access_sites
+        )
 
         if len(blocked_sites) > 0:
             blocked_mask = np.zeros_like(positions, dtype=bool)
@@ -192,6 +220,8 @@ class SulfurNickelHoppingCalculator(InteractingHoppingCalculator):
             blocked_neighbors = blocked_mask[neighbor_rows, neighbor_cols]
             rates[blocked_neighbors] = 0.0
 
+        # TODO: for each particle in layer_access_sites, include an energy diff & probability of moving into a layer
+        # TODO: create a list of available sites for each particle so layers can be included
         row_sums = rates.sum(axis=1)
         over_rows = row_sums > 1.0
         rates[over_rows] /= row_sums[over_rows, None]
@@ -202,7 +232,7 @@ class SulfurNickelHoppingCalculator(InteractingHoppingCalculator):
 
         # Stationary probability
         rates[:, 4] = 1 - rates.sum(axis=1)
-
+        # TODO: also return positions
         return np.clip(rates, 0.0, 1.0)
 
 
@@ -212,64 +242,87 @@ def _get_blocked_sites(  # noqa: PLR0914
     layer_indices: np.ndarray,
     layer_indices_mirrored: np.ndarray,
 ) -> np.ndarray:
-    """Generate a list of inaccessible base sites due to filled layers."""
-    blocked_sites = []
-    layer_indices_dict = {0: layer_indices, 1: layer_indices_mirrored}
+    """
+    Generate a mapping of base sites that are blocked by filled layers.
 
-    tile_horizontal_vector = {0: np.array([1, -3]), 1: np.array([1, 3])}
-    tile_vertical_vector = {0: np.array([3, 1]), 1: np.array([3, -1])}
+    Return format is [blocked_site_x, blocked_site_y, layer_number, layer_x, layer_y].
+    """
+    layer_indices_lookup = {0: layer_indices, 1: layer_indices_mirrored}
+    horizontal_vectors = {0: np.array([1, -3]), 1: np.array([1, 3])}
+    vertical_vectors = {0: np.array([3, 1]), 1: np.array([3, -1])}
 
-    n_tiles = int((len(layer_indices) - 1) // 6) + 1
-    half_size = (layers.shape[1] - 1) // 2
+    num_tiles = (len(layer_indices) - 1) // 6 + 1
+    half_layer_size = (layers.shape[1] - 1) // 2
+    relative_positions = np.array(list(relative_tile_positions.values()))
 
-    # Precompute relative positions
-    rel_positions = np.array(list(relative_tile_positions.values()))
-
-    for i in range(len(layers)):
-        orientation = layer_data[i][1]
-        blocked_site_dictionary = blocked_hcp_sites[orientation]
-
-        # Generate tile grid
-        xv, yv = np.meshgrid(
-            np.arange(-n_tiles, n_tiles), np.arange(-n_tiles, n_tiles), indexing="ij"
+    # Precompute lattice grids
+    grid_cache: dict[int, np.ndarray] = {}
+    for parity in (0, 1):
+        x_grid, y_grid = np.meshgrid(
+            np.arange(-num_tiles, num_tiles),
+            np.arange(-num_tiles, num_tiles),
+            indexing="ij",
         )
         tile_points = (
-            xv[..., None] * tile_horizontal_vector[orientation % 2]
-            + yv[..., None] * tile_vertical_vector[orientation % 2]
+            x_grid[..., None] * horizontal_vectors[parity]
+            + y_grid[..., None] * vertical_vectors[parity]
         )
-        tile_points = tile_points.reshape(-1, 2)  # flatten grid
+        grid_cache[parity] = tile_points.reshape(-1, 2)
 
-        # Add relative positions → candidate sulfur coordinates
-        sulfur_positions = tile_points[:, None, :] + rel_positions[None, :, :]
-        sulfur_positions = sulfur_positions.reshape(-1, 2)
+    records: list[list[int]] = []
 
-        # Check bounds
-        mask = (np.abs(sulfur_positions[:, 0]) <= half_size) & (
-            np.abs(sulfur_positions[:, 1]) <= half_size
+    # Process each layer
+    for layer_index, layer in enumerate(layers):
+        orientation = int(layer_data[layer_index][1])
+        parity = orientation % 2
+        blocked_dictionary = blocked_hcp_sites[orientation]
+
+        sulfur_positions = (
+            grid_cache[parity][:, None, :] + relative_positions[None, :, :]
+        ).reshape(-1, 2)
+
+        # Keep only sulfur positions within bounds
+        inside_bounds = (np.abs(sulfur_positions[:, 0]) <= half_layer_size) & (
+            np.abs(sulfur_positions[:, 1]) <= half_layer_size
         )
-        sulfur_positions = sulfur_positions[mask]
+        sulfur_positions = sulfur_positions[inside_bounds]
 
-        # Convert to indices in layer grid
-        xs = (sulfur_positions[:, 0] + half_size).astype(int)
-        ys = (sulfur_positions[:, 1] + half_size).astype(int)
+        x_indices = (sulfur_positions[:, 0] + half_layer_size).astype(int)
+        y_indices = (sulfur_positions[:, 1] + half_layer_size).astype(int)
 
-        # Keep only positions where there is a particle
-        occupied_mask = layers[i, xs, ys]
-        sulfur_positions = sulfur_positions[occupied_mask]
-        xs, ys = xs[occupied_mask], ys[occupied_mask]
+        # Check occupancy
+        occupied = layer[x_indices, y_indices]
+        if not np.any(occupied):
+            continue
 
-        # Map to layer index and then to blocked sites
-        indices = layer_indices_dict[orientation % 2][xs, ys]
-        for sulfur_pos, idx in zip(sulfur_positions, indices, strict=False):
-            blocked_sites.extend(
-                layer_data[i][0]
-                + sulfur_pos[0] * hcp_horizontal_vector[orientation]
-                + sulfur_pos[1] * hcp_vertical_vector[orientation]
-                + tile_vector
-                for tile_vector in blocked_site_dictionary[int(idx)]
-            )
+        sulfur_positions = sulfur_positions[occupied]
+        x_indices, y_indices = x_indices[occupied], y_indices[occupied]
 
-    return np.unique(np.array(blocked_sites, dtype=int), axis=0)
+        index_grid = layer_indices_lookup[parity]
+        tile_indices = index_grid[x_indices, y_indices]
+
+        base_position = layer_data[layer_index][0]
+        horizontal_vector = hcp_horizontal_vector[orientation]
+        vertical_vector = hcp_vertical_vector[orientation]
+
+        # Collect blocked sites + mapping to empty layer sites
+        for pos, tile_idx, xi, yi in zip(
+            sulfur_positions, tile_indices, x_indices, y_indices, strict=False
+        ):
+            site_offsets = blocked_dictionary[int(tile_idx)]
+            if len(site_offsets) > 0:
+                for offset in site_offsets:
+                    base_site = (
+                        base_position
+                        + pos[0] * horizontal_vector
+                        + pos[1] * vertical_vector
+                        + np.array(offset, dtype=int)
+                    )
+                    records.append([base_site[0], base_site[1], layer_index, xi, yi])
+
+    if records:
+        return np.unique(np.array(records, dtype=int), axis=0)
+    return np.empty((0, 5), dtype=int)
 
 
 def _get_layer_access_sites(
@@ -313,3 +366,52 @@ def _get_layer_access_sites(
         layer_indices=layer_indices,
         layer_indices_mirrored=layer_indices_mirrored,
     )
+
+
+test_layers = np.array(
+    [
+        # Layer 0
+        [
+            [0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0],
+            [0, 0, 1, 0, 0],
+            [0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0],
+        ],
+        # Layer 1
+        [
+            [0, 0, 0, 0, 0],
+            [0, 0, 0, 1, 0],
+            [0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0],
+        ],
+    ],
+    dtype=bool,
+)
+
+test_layer_data = np.array(
+    [
+        [np.array([0, 0]), 0],
+        [np.array([13, -2]), 5],
+    ],
+    dtype=object,
+)
+
+testclass = SulfurNickelData(max_layer_size=5)
+print(  # noqa: T201
+    _get_blocked_sites(
+        layers=test_layers,
+        layer_data=test_layer_data,
+        layer_indices=testclass.layer_tiling_indices,
+        layer_indices_mirrored=testclass.layer_tiling_indices_mirrored,
+    )
+)
+print(  # noqa: T201
+    _get_layer_access_sites(
+        layer_data=test_layer_data,
+        layers=test_layers,
+        layer_indices=testclass.layer_tiling_indices,
+        layer_indices_mirrored=testclass.layer_tiling_indices_mirrored,
+    )
+)

@@ -13,7 +13,7 @@ from scipy.optimize import (  # type: ignore[reportMissingTypeStubs]
     root_scalar,  # type: ignore[reportMissingTypeStubs]
 )
 
-from sulfur_simulation.scattering_calculation import JUMP_DIRECTIONS
+from sulfur_simulation.sulfur_data import JUMP_DIRECTIONS
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -84,7 +84,7 @@ class HoppingCalculator(ABC):
     """Abstract base class for calculating hopping probabilities."""
 
     @abstractmethod
-    def get_hopping_probabilities(
+    def get_hopping_probabilities_and_destinations(
         self, positions: np.ndarray, layers: np.ndarray | None
     ) -> np.ndarray:
         """Get hopping probabilities."""
@@ -116,7 +116,7 @@ class BaseRateHoppingCalculator(HoppingCalculator):
         return a / np.linalg.norm(a), b / np.linalg.norm(b)
 
     @override
-    def get_hopping_probabilities(
+    def get_hopping_probabilities_and_destinations(
         self,
         positions: np.ndarray[tuple[int, int], np.dtype[np.bool_]],
         layers: np.ndarray | None,

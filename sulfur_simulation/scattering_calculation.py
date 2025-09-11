@@ -6,23 +6,12 @@ from typing import TYPE_CHECKING
 import numpy as np
 from tqdm import trange
 
+from sulfur_simulation.sulfur_data import DEFECT_LOCATIONS, JUMP_DIRECTIONS
+from sulfur_simulation.sulfur_nickel_calculator import SulfurNickelHoppingCalculator
+
 if TYPE_CHECKING:
     from hopping_calculator import HoppingCalculator
     from numpy.random import Generator
-
-JUMP_DIRECTIONS = np.array(
-    [
-        (-1, -1),
-        (-1, 0),
-        (-1, 1),
-        (0, -1),
-        (0, 0),
-        (0, 1),
-        (1, -1),
-        (1, 0),
-        (1, 1),
-    ]
-)
 
 
 @dataclass(kw_only=True, frozen=True)
@@ -72,6 +61,7 @@ class SimulationResult:
     "The number of successful jumps in each direction"
     attempted_jump_counter: np.ndarray[tuple[int], np.dtype[np.int_]]
     "The number of jumps attempted"
+    layers: np.ndarray[tuple[int, int, int, int], np.dtype[np.bool_]] | None
 
 
 def _wrap_index(index: tuple[int, int], shape: tuple[int, int]) -> tuple[int, int]:
@@ -101,7 +91,7 @@ def _make_jump(
     # if destination is full, don't do anything
     if result.positions[idx][final_idx]:
         return
-
+    # also update layers in simulation.result
     result.jump_count[jump_idx] += 1
     result.positions[idx][final_idx] = True
     result.positions[idx][initial_index] = False
@@ -122,6 +112,8 @@ def _update_result(
 ) -> None:
     true_locations = np.flatnonzero(result.positions[idx - 1])
     result.positions[idx] = result.positions[idx - 1]
+
+    # TODO: take in particle positions as well as probabilities
 
     for loc_idx in rng.permutation(len(true_locations)):
         initial_location = int(true_locations[loc_idx])
@@ -151,23 +143,65 @@ def _run_single_simulation(
     all_positions[0] = params.initial_positions
     jump_counter = np.zeros(9, dtype=np.int_)
     attempted_jump_counter = np.zeros(9, dtype=np.int_)
-    out = SimulationResult(
-        positions=all_positions,
-        jump_count=jump_counter,
-        attempted_jump_counter=attempted_jump_counter,
-    )
 
-    for i in trange(1, params.n_timesteps):
-        jump_probabilities = params.hopping_calculator.get_hopping_probabilities(
-            all_positions[i - 1], layers=None
+    if isinstance(params.hopping_calculator, SulfurNickelHoppingCalculator):
+        all_layers = np.empty(
+            (
+                params.n_timesteps,
+                len(DEFECT_LOCATIONS),
+                *(
+                    params.hopping_calculator.sulfur_nickel_data.max_layer_size,
+                    params.hopping_calculator.sulfur_nickel_data.max_layer_size,
+                ),
+            ),
+            dtype=np.bool_,
+        )
+        all_layers[0] = (
+            params.hopping_calculator.sulfur_nickel_data.initial_sulfur_layers
         )
 
-        _update_result(
-            idx=i,
-            result=out,
-            jump_probabilities=jump_probabilities,
-            rng=rng,
+        out = SimulationResult(
+            positions=all_positions,
+            jump_count=jump_counter,
+            attempted_jump_counter=attempted_jump_counter,
+            layers=all_layers,
         )
+
+        for i in trange(1, params.n_timesteps):
+            jump_probabilities = (
+                params.hopping_calculator.get_hopping_probabilities_and_destinations(
+                    all_positions[i - 1], layers=all_layers
+                )
+            )
+
+            _update_result(
+                idx=i,
+                result=out,
+                jump_probabilities=jump_probabilities,
+                rng=rng,
+            )
+
+    else:
+        out = SimulationResult(
+            positions=all_positions,
+            jump_count=jump_counter,
+            attempted_jump_counter=attempted_jump_counter,
+            layers=None,
+        )
+
+        for i in trange(1, params.n_timesteps):
+            jump_probabilities = (
+                params.hopping_calculator.get_hopping_probabilities_and_destinations(
+                    all_positions[i - 1], layers=None
+                )
+            )
+
+            _update_result(
+                idx=i,
+                result=out,
+                jump_probabilities=jump_probabilities,
+                rng=rng,
+            )
 
     return out
 
