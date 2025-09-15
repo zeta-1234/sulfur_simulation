@@ -86,7 +86,7 @@ class HoppingCalculator(ABC):
     @abstractmethod
     def get_hopping_probabilities_and_destinations(
         self, positions: np.ndarray, layers: np.ndarray | None
-    ) -> np.ndarray:
+    ) -> tuple[list[np.ndarray], list[np.ndarray]]:
         """Get hopping probabilities."""
 
 
@@ -115,27 +115,27 @@ class BaseRateHoppingCalculator(HoppingCalculator):
         a, b = self._lattice_directions
         return a / np.linalg.norm(a), b / np.linalg.norm(b)
 
-    @override
-    def get_hopping_probabilities_and_destinations(
+    def _get_rates(
         self,
         positions: np.ndarray[tuple[int, int], np.dtype[np.bool_]],
-        layers: np.ndarray | None,
-    ) -> np.ndarray[tuple[int, int], np.dtype[np.floating]]:
+        layer_access_sites: np.ndarray | None,
+    ) -> np.ndarray:
+        _ = layer_access_sites
         energies = self._get_energy_landscape(positions=positions)
+
         rows, cols = np.nonzero(positions)
 
         delta = JUMP_DIRECTIONS
+
         beta = 1 / (2 * Boltzmann * self._temperature)
-        # take smallest baserate and use it to define a maximum valid exp argument
         max_exp_arg = np.log(1 / np.min(self._baserate.grid[self._baserate.grid > 0]))
 
         # Compute energy differences to neighbors
+        neighbor_rows = (rows[:, None] + delta[:, 0]) % positions.shape[0]
+        neighbor_cols = (cols[:, None] + delta[:, 1]) % positions.shape[1]
+
         energy_difference = (
-            energies[
-                (rows[:, None] + delta[:, 0]) % positions.shape[0],
-                (cols[:, None] + delta[:, 1]) % positions.shape[1],
-            ]
-            - energies[rows, cols][:, None]
+            energies[neighbor_rows, neighbor_cols] - energies[rows, cols][:, None]
         )
 
         exponent = np.clip(-beta * energy_difference, a_min=None, a_max=max_exp_arg)
@@ -145,8 +145,15 @@ class BaseRateHoppingCalculator(HoppingCalculator):
                 stacklevel=2,
             )
 
-        rates = np.exp(exponent) * self._baserate.grid
+        return np.exp(exponent) * self._baserate.grid
 
+    @override
+    def get_hopping_probabilities_and_destinations(
+        self,
+        positions: np.ndarray[tuple[int, int], np.dtype[np.bool_]],
+        layers: np.ndarray | None,
+    ) -> tuple[list[np.ndarray], list[np.ndarray]]:
+        rates = self._get_rates(positions=positions, layer_access_sites=None)
         row_sums = rates.sum(axis=1)
         over_rows = row_sums > 1.0
         rates[over_rows] /= row_sums[over_rows, None]
@@ -157,8 +164,23 @@ class BaseRateHoppingCalculator(HoppingCalculator):
 
         # Stationary probability
         rates[:, 4] = 1 - rates.sum(axis=1)
+        rates = np.clip(rates, 0.0, 1.0)
 
-        return np.clip(rates, 0.0, 1.0)
+        probabilities_list: list[np.ndarray] = []
+        destinations_list: list[np.ndarray] = []
+
+        shape = positions.shape
+        rows, cols = np.nonzero(positions)
+        for r, c, prob_row in zip(rows, cols, rates, strict=True):
+            destinations = []
+            for jump in JUMP_DIRECTIONS:  # includes stationary at index 4
+                rr, cc = self._get_next_index((r, c), jump, shape)
+                destinations.append((rr, cc, -1))  # ground level
+
+            probabilities_list.append(prob_row)
+            destinations_list.append(np.array(destinations, dtype=int))
+
+        return probabilities_list, destinations_list
 
     def _get_energy_landscape(
         self, positions: np.ndarray[tuple[int, int], np.dtype[np.bool_]]
@@ -166,6 +188,23 @@ class BaseRateHoppingCalculator(HoppingCalculator):
         """Generate the energy landscape for the lattice."""
         _ = self
         return np.full(positions.shape, 3.2e-19)
+
+    def _wrap_index(
+        self, index: tuple[int, int], shape: tuple[int, int]
+    ) -> tuple[int, int]:
+        """Wrap index to stay within the bounds of the lattice."""
+        _ = self
+        return (index[0] % shape[0], index[1] % shape[1])
+
+    def _get_next_index(
+        self,
+        initial_index: tuple[int, int],
+        jump: tuple[int, int],
+        shape: tuple[int, int],
+    ) -> tuple[int, int]:
+        return self._wrap_index(
+            (initial_index[0] + jump[0], initial_index[1] + jump[1]), shape
+        )
 
 
 class LineDefectHoppingCalculator(BaseRateHoppingCalculator):

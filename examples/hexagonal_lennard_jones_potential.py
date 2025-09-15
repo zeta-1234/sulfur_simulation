@@ -25,7 +25,6 @@ from sulfur_simulation.show_simulation import (
     animate_particle_positions,
     plot_mean_jump_rates,
 )
-from sulfur_simulation.sulfur_data import DEFECT_LOCATIONS
 
 if __name__ == "__main__":
     params = SimulationParameters(
@@ -43,7 +42,7 @@ if __name__ == "__main__":
         ),
     )
 
-    results = run_simulation(n_runs=3, params=params)
+    results = run_simulation(n_runs=5, params=params)
 
     isf_params = ISFParameters(params=params)
 
@@ -69,14 +68,14 @@ if __name__ == "__main__":
 
     plot_mean_jump_rates(results=results, ax=axes[2])
 
-    timesteps = np.arange(1, params.n_timesteps, 20, dtype=int)
+    timesteps = np.arange(1, params.n_timesteps, 1, dtype=int)
 
     anim = animate_particle_positions(
         all_positions=results[0].positions,
         lattice_dimension=params.lattice_dimension,
         lattice_vectors=(np.array([1, 0]), np.array([1 / 2, np.sqrt(3) / 2])),
         timesteps=timesteps,
-        defect_locations=DEFECT_LOCATIONS,
+        defect_locations=None,
     )
 
     plt.show()

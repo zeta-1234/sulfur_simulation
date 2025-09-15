@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib import animation
 
-from sulfur_simulation.scattering_calculation import JUMP_DIRECTIONS, SimulationResult
+from sulfur_simulation.sulfur_data import JUMP_DIRECTIONS
 from sulfur_simulation.util import get_figure
 
 if TYPE_CHECKING:
@@ -15,7 +15,10 @@ if TYPE_CHECKING:
     from matplotlib.figure import Figure, SubFigure
     from numpy.typing import NDArray
 
-    from sulfur_simulation.scattering_calculation import SimulationParameters
+    from sulfur_simulation.scattering_calculation import (
+        SimulationParameters,
+        SimulationResult,
+    )
 
 
 def animate_particle_positions(
@@ -122,7 +125,7 @@ def plot_mean_jump_rates(
     """Plot attempted and successful jump counts."""
     delta = JUMP_DIRECTIONS
     labels = [f"{d}" for d in delta]
-
+    labels.append("Layers")
     width = 0.35
     fig, ax = get_figure(ax=ax)
 

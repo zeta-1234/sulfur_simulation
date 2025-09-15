@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import numpy as np
 from tqdm import trange
 
-from sulfur_simulation.sulfur_data import DEFECT_LOCATIONS, JUMP_DIRECTIONS
+from sulfur_simulation.sulfur_data import DEFECT_LOCATIONS
 from sulfur_simulation.sulfur_nickel_calculator import SulfurNickelHoppingCalculator
 
 if TYPE_CHECKING:
@@ -64,37 +64,32 @@ class SimulationResult:
     layers: np.ndarray[tuple[int, int, int, int], np.dtype[np.bool_]] | None
 
 
-def _wrap_index(index: tuple[int, int], shape: tuple[int, int]) -> tuple[int, int]:
-    """Wrap index to stay within the bounds of the lattice."""
-    return (index[0] % shape[0], index[1] % shape[1])
-
-
-def _get_next_index(
-    initial_index: tuple[int, int], jump: tuple[int, int], shape: tuple[int, int]
-) -> tuple[int, int]:
-    return _wrap_index((initial_index[0] + jump[0], initial_index[1] + jump[1]), shape)
-
-
 def _make_jump(
     idx: int,
     result: SimulationResult,
-    initial_location: int,
     jump_idx: int,
+    move_destinations: np.ndarray,
+    initial_location: np.ndarray,
 ) -> None:
-    initial_index = np.unravel_index(initial_location, result.positions[idx].shape)
-    final_idx = _get_next_index(
-        initial_index,  # type: ignore misc
-        JUMP_DIRECTIONS[jump_idx],
-        result.positions[idx].shape,
+    row, column, layer = move_destinations[jump_idx]
+    old_row, old_column = np.unravel_index(
+        initial_location, result.positions[idx].shape
     )
-    result.attempted_jump_counter[jump_idx] += 1
-    # if destination is full, don't do anything
-    if result.positions[idx][final_idx]:
-        return
-    # also update layers in simulation.result
-    result.jump_count[jump_idx] += 1
-    result.positions[idx][final_idx] = True
-    result.positions[idx][initial_index] = False
+
+    if layer == -1:
+        result.attempted_jump_counter[jump_idx] += 1
+        if result.positions[idx][row, column]:
+            return
+        result.jump_count[jump_idx] += 1
+        result.positions[idx][row, column] = True
+    else:
+        assert result.layers is not None
+        result.attempted_jump_counter[9] += 1
+        if result.layers[idx][layer][row, column]:
+            return
+        result.jump_count[9] += 1
+        result.layers[idx][layer][row, column] = True
+    result.positions[idx][old_row, old_column] = False
 
 
 def _assert_cumulative_probability_valid(move_probabilities: np.ndarray) -> None:
@@ -107,17 +102,16 @@ def _assert_cumulative_probability_valid(move_probabilities: np.ndarray) -> None
 def _update_result(
     idx: int,
     result: SimulationResult,
-    jump_probabilities: np.ndarray,
+    jump_probabilities: list[np.ndarray],
+    jump_destinations: list[np.ndarray],
     rng: Generator,
 ) -> None:
     true_locations = np.flatnonzero(result.positions[idx - 1])
-    result.positions[idx] = result.positions[idx - 1]
+    result.positions[idx] = result.positions[idx - 1].copy()
 
-    # TODO: take in particle positions as well as probabilities
-
-    for loc_idx in rng.permutation(len(true_locations)):
-        initial_location = int(true_locations[loc_idx])
-        move_probabilities = jump_probabilities[loc_idx]
+    for particle_idx in rng.permutation(len(true_locations)):
+        move_probabilities = cast("np.ndarray", jump_probabilities[particle_idx])
+        move_destinations = cast("np.ndarray", jump_destinations[particle_idx])
 
         _assert_cumulative_probability_valid(move_probabilities)
 
@@ -129,7 +123,8 @@ def _update_result(
                 idx=idx,
                 result=result,
                 jump_idx=jump_idx,
-                initial_location=initial_location,
+                move_destinations=move_destinations,
+                initial_location=true_locations[particle_idx],
             )
 
 
@@ -141,8 +136,8 @@ def _run_single_simulation(
         (params.n_timesteps, *params.lattice_dimension), dtype=np.bool_
     )
     all_positions[0] = params.initial_positions
-    jump_counter = np.zeros(9, dtype=np.int_)
-    attempted_jump_counter = np.zeros(9, dtype=np.int_)
+    jump_counter = np.zeros(10, dtype=np.int_)
+    attempted_jump_counter = np.zeros(10, dtype=np.int_)
 
     if isinstance(params.hopping_calculator, SulfurNickelHoppingCalculator):
         all_layers = np.empty(
@@ -168,7 +163,7 @@ def _run_single_simulation(
         )
 
         for i in trange(1, params.n_timesteps):
-            jump_probabilities = (
+            jump_probabilities, jump_destinations = (
                 params.hopping_calculator.get_hopping_probabilities_and_destinations(
                     all_positions[i - 1], layers=all_layers
                 )
@@ -178,6 +173,7 @@ def _run_single_simulation(
                 idx=i,
                 result=out,
                 jump_probabilities=jump_probabilities,
+                jump_destinations=jump_destinations,
                 rng=rng,
             )
 
@@ -190,7 +186,7 @@ def _run_single_simulation(
         )
 
         for i in trange(1, params.n_timesteps):
-            jump_probabilities = (
+            jump_probabilities, jump_destinations = (
                 params.hopping_calculator.get_hopping_probabilities_and_destinations(
                     all_positions[i - 1], layers=None
                 )
@@ -200,6 +196,7 @@ def _run_single_simulation(
                 idx=i,
                 result=out,
                 jump_probabilities=jump_probabilities,
+                jump_destinations=jump_destinations,
                 rng=rng,
             )
 
