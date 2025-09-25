@@ -32,7 +32,7 @@ from sulfur_simulation.sulfur_nickel_calculator import (
 
 if __name__ == "__main__":
     params = SimulationParameters(
-        n_timesteps=12000,
+        n_timesteps=2000,
         lattice_dimension=(100, 100),
         n_particles=500,
         hopping_calculator=SulfurNickelHoppingCalculator(
@@ -43,11 +43,11 @@ if __name__ == "__main__":
                 2.5 * np.array([0.5, np.sqrt(3) / 2]),
             ),
             interaction=get_lennard_jones_potential(sigma=2.45, epsilon=0.03 * 1.6e-19),
-            sulfur_nickel_data=SulfurNickelData(max_layer_size=7),
+            sulfur_nickel_data=SulfurNickelData(max_layer_size=9),
         ),
     )
 
-    results = run_simulation(n_runs=5, params=params)
+    results = run_simulation(n_runs=1, params=params)
 
     isf_params = ISFParameters(params=params)
 

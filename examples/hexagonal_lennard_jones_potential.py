@@ -28,7 +28,7 @@ from sulfur_simulation.show_simulation import (
 
 if __name__ == "__main__":
     params = SimulationParameters(
-        n_timesteps=12000,
+        n_timesteps=1000,
         lattice_dimension=(100, 100),
         n_particles=500,
         hopping_calculator=InteractingHoppingCalculator(
@@ -42,7 +42,7 @@ if __name__ == "__main__":
         ),
     )
 
-    results = run_simulation(n_runs=5, params=params)
+    results = run_simulation(n_runs=1, params=params)
 
     isf_params = ISFParameters(params=params)
 

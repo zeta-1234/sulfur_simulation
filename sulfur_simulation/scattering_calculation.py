@@ -59,7 +59,7 @@ class SimulationResult:
     "The particles' positions at each timestep"
     jump_count: np.ndarray[tuple[int], np.dtype[np.int_]]
     "The number of successful jumps in each direction"
-    attempted_jump_counter: np.ndarray[tuple[int], np.dtype[np.int_]]
+    attempted_jump_count: np.ndarray[tuple[int], np.dtype[np.int_]]
     "The number of jumps attempted"
     layers: np.ndarray[tuple[int, int, int, int], np.dtype[np.bool_]] | None
 
@@ -77,14 +77,14 @@ def _make_jump(
     )
 
     if layer == -1:
-        result.attempted_jump_counter[jump_idx] += 1
+        result.attempted_jump_count[jump_idx] += 1
         if result.positions[idx][row, column]:
             return
         result.jump_count[jump_idx] += 1
         result.positions[idx][row, column] = True
     else:
         assert result.layers is not None
-        result.attempted_jump_counter[9] += 1
+        result.attempted_jump_count[9] += 1
         if result.layers[idx][layer][row, column]:
             return
         result.jump_count[9] += 1
@@ -158,14 +158,14 @@ def _run_single_simulation(
         out = SimulationResult(
             positions=all_positions,
             jump_count=jump_counter,
-            attempted_jump_counter=attempted_jump_counter,
+            attempted_jump_count=attempted_jump_counter,
             layers=all_layers,
         )
 
         for i in trange(1, params.n_timesteps):
             jump_probabilities, jump_destinations = (
                 params.hopping_calculator.get_hopping_probabilities_and_destinations(
-                    all_positions[i - 1], layers=all_layers
+                    all_positions[i - 1], layers=all_layers[i - 1]
                 )
             )
 
@@ -181,7 +181,7 @@ def _run_single_simulation(
         out = SimulationResult(
             positions=all_positions,
             jump_count=jump_counter,
-            attempted_jump_counter=attempted_jump_counter,
+            attempted_jump_count=attempted_jump_counter,
             layers=None,
         )
 

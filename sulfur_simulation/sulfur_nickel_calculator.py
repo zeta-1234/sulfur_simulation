@@ -130,37 +130,77 @@ class SulfurNickelHoppingCalculator(InteractingHoppingCalculator):
         energies[self._defect_indices] -= 1.6e-20
         return energies
 
-    def _get_rates(
+    def _get_rates_with_layers(  # noqa: PLR0914
         self,
         positions: np.ndarray[tuple[int, int], np.dtype[np.bool_]],
-        layer_access_sites: np.ndarray,
-    ) -> np.ndarray:
-        _ = layer_access_sites
+        layer_access_sites: np.ndarray | None,
+        blocked_sites: np.ndarray | None,
+    ) -> list[np.ndarray]:
         energies = self._get_energy_landscape(positions=positions)
-
         rows, cols = np.nonzero(positions)
 
         delta = JUMP_DIRECTIONS
-
         beta = 1 / (2 * Boltzmann * self._temperature)
         max_exp_arg = np.log(1 / np.min(self._baserate.grid[self._baserate.grid > 0]))
 
-        # Compute energy differences to neighbors
+        # --- Base lattice moves ---
         neighbor_rows = (rows[:, None] + delta[:, 0]) % positions.shape[0]
         neighbor_cols = (cols[:, None] + delta[:, 1]) % positions.shape[1]
 
         energy_difference = (
             energies[neighbor_rows, neighbor_cols] - energies[rows, cols][:, None]
         )
-
         exponent = np.clip(-beta * energy_difference, a_min=None, a_max=max_exp_arg)
-        if np.any(np.isclose(exponent, max_exp_arg)):
-            warnings.warn(
-                "Some energy differences are too large, the resulting distribution may be inaccurate.",
-                stacklevel=2,
-            )
+        rates = np.exp(exponent) * self._baserate.grid  # shape (n_particles, 9)
 
-        return np.exp(exponent) * self._baserate.grid
+        # --- Blocked sites ---
+        if blocked_sites is not None and len(blocked_sites) > 0:
+            blocked_mask = np.zeros_like(positions, dtype=bool)
+            blocked_mask[blocked_sites[:, 0], blocked_sites[:, 1]] = True
+            blocked_neighbors = blocked_mask[neighbor_rows, neighbor_cols]
+            rates[blocked_neighbors] = 0.0
+
+        # --- Convert to list of arrays (so we can append layer moves) ---
+        rates_list: list[np.ndarray] = [row.copy() for row in rates]
+
+        # --- Handle layer access sites ---
+        if layer_access_sites is not None and len(layer_access_sites) > 0:
+            # build mapping from (r, c) → particle index
+            site_to_idx = {
+                (r, c): i for i, (r, c) in enumerate(zip(rows, cols, strict=True))
+            }
+
+            for site_x, site_y, _, _, _ in layer_access_sites:
+                particle_idx = site_to_idx.get((site_x, site_y))
+                if particle_idx is None:
+                    continue  # no active particle at this site
+
+                # compute energy difference using layer energy vs. self-energy
+                delta_e = (
+                    self.sulfur_nickel_data.layer_energy - energies[site_x, site_y]
+                )
+                exponent = np.clip(-beta * delta_e, a_min=None, a_max=max_exp_arg)
+                rate = np.exp(exponent) * np.min(self._baserate.grid)
+
+                # append to that particle's rate vector
+                rates_list[particle_idx] = np.append(rates_list[particle_idx], rate)
+
+        # --- Normalisation (ragged aware) ---
+        final_rates: list[np.ndarray] = []
+        for rate_vec in rates_list:
+            row = rate_vec.copy()
+            row_sum = row.sum()
+            if row_sum > 1.0:
+                row /= row_sum
+            if row_sum > 0.5:  # noqa: PLR2004
+                warnings.warn("Some probabilities exceed 0.5", stacklevel=2)
+
+            # stationary probability (index 4 always)
+            row[4] = 1 - row.sum()
+            row = np.clip(row, 0.0, 1.0)
+            final_rates.append(row)
+
+        return final_rates
 
     def _get_blocked_and_available_sites(
         self,
@@ -194,11 +234,11 @@ class SulfurNickelHoppingCalculator(InteractingHoppingCalculator):
         self,
         positions: np.ndarray[tuple[int, int], np.dtype[np.bool_]],
         layers: np.ndarray | None,
-    ) -> np.ndarray[tuple[int, int], np.dtype[np.floating]]:
+    ) -> tuple[
+        list[np.ndarray[tuple[int, int], np.dtype[np.floating]]],
+        list[np.ndarray[tuple[int, int], np.dtype[np.int_]]],
+    ]:
         rows, cols = np.nonzero(positions)
-        delta = JUMP_DIRECTIONS
-        neighbor_rows = (rows[:, None] + delta[:, 0]) % positions.shape[0]
-        neighbor_cols = (cols[:, None] + delta[:, 1]) % positions.shape[1]
 
         assert layers is not None
 
@@ -209,31 +249,34 @@ class SulfurNickelHoppingCalculator(InteractingHoppingCalculator):
             layer_indices_mirrored=self._layer_tiling_indices_mirrored,
         )
 
-        rates = self._get_rates(
-            positions=positions, layer_access_sites=layer_access_sites
+        rates = self._get_rates_with_layers(
+            positions=positions,
+            layer_access_sites=layer_access_sites,
+            blocked_sites=blocked_sites,
         )
 
-        if len(blocked_sites) > 0:
-            blocked_mask = np.zeros_like(positions, dtype=bool)
-            blocked_mask[blocked_sites[:, 0], blocked_sites[:, 1]] = True
+        probabilities_list: list[np.ndarray] = []
+        destinations_list: list[np.ndarray] = []
 
-            blocked_neighbors = blocked_mask[neighbor_rows, neighbor_cols]
-            rates[blocked_neighbors] = 0.0
+        shape = positions.shape
+        rows, cols = np.nonzero(positions)
+        for r, c, prob_row in zip(rows, cols, rates, strict=True):
+            destinations = []
+            # adding basic 9 directions
+            for jump in JUMP_DIRECTIONS:  # includes stationary at index 4
+                rr, cc = self._get_next_index((r, c), jump, shape)
+                destinations.append((rr, cc, -1))  # ground level
 
-        # TODO: for each particle in layer_access_sites, include an energy diff & probability of moving into a layer
-        # TODO: create a list of available sites for each particle so layers can be included
-        row_sums = rates.sum(axis=1)
-        over_rows = row_sums > 1.0
-        rates[over_rows] /= row_sums[over_rows, None]
+            if len(layer_access_sites) > 0:
+                # filter access sites for this particle
+                mask = (layer_access_sites[:, 0] == r) & (layer_access_sites[:, 1] == c)
+                for _, _, layer_num, layer_x, layer_y in layer_access_sites[mask]:
+                    destinations.append((layer_x, layer_y, layer_num))
 
-        warning_threshold = 0.5
-        if np.any(row_sums > warning_threshold):
-            warnings.warn("Some probabilities exceed 0.5", stacklevel=2)
+            probabilities_list.append(prob_row)
+            destinations_list.append(np.array(destinations, dtype=int))
 
-        # Stationary probability
-        rates[:, 4] = 1 - rates.sum(axis=1)
-        # TODO: also return positions
-        return np.clip(rates, 0.0, 1.0)
+        return (probabilities_list, destinations_list)
 
 
 def _get_blocked_sites(  # noqa: PLR0914
@@ -252,7 +295,7 @@ def _get_blocked_sites(  # noqa: PLR0914
     vertical_vectors = {0: np.array([3, 1]), 1: np.array([3, -1])}
 
     num_tiles = (len(layer_indices) - 1) // 6 + 1
-    half_layer_size = (layers.shape[1] - 1) // 2
+    half_layer_size = (layers.shape[2] - 1) // 2
     relative_positions = np.array(list(relative_tile_positions.values()))
 
     # Precompute lattice grids
@@ -347,7 +390,7 @@ def _get_layer_access_sites(
         # If the layer is completely empty → set center to True
         if true_positions.size == 0:
             center = (num_rows // 2, num_columns // 2)
-            new_layers[dz, center] = True
+            new_layers[dz, center[0], center[1]] = True
             continue
 
         for row, column in true_positions:
@@ -358,7 +401,7 @@ def _get_layer_access_sites(
                     new_layers[dz, rr, cc] = True
 
         # clear original sites
-        new_layers[dz, layers[dz]] = False
+        new_layers[dz][layers[dz]] = False
 
     return _get_blocked_sites(
         layers=new_layers,
@@ -366,52 +409,3 @@ def _get_layer_access_sites(
         layer_indices=layer_indices,
         layer_indices_mirrored=layer_indices_mirrored,
     )
-
-
-test_layers = np.array(
-    [
-        # Layer 0
-        [
-            [0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0],
-            [0, 0, 1, 0, 0],
-            [0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0],
-        ],
-        # Layer 1
-        [
-            [0, 0, 0, 0, 0],
-            [0, 0, 0, 1, 0],
-            [0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0],
-        ],
-    ],
-    dtype=bool,
-)
-
-test_layer_data = np.array(
-    [
-        [np.array([0, 0]), 0],
-        [np.array([13, -2]), 5],
-    ],
-    dtype=object,
-)
-
-testclass = SulfurNickelData(max_layer_size=5)
-print(  # noqa: T201
-    _get_blocked_sites(
-        layers=test_layers,
-        layer_data=test_layer_data,
-        layer_indices=testclass.layer_tiling_indices,
-        layer_indices_mirrored=testclass.layer_tiling_indices_mirrored,
-    )
-)
-print(  # noqa: T201
-    _get_layer_access_sites(
-        layer_data=test_layer_data,
-        layers=test_layers,
-        layer_indices=testclass.layer_tiling_indices,
-        layer_indices_mirrored=testclass.layer_tiling_indices_mirrored,
-    )
-)

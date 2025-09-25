@@ -119,8 +119,10 @@ class BaseRateHoppingCalculator(HoppingCalculator):
         self,
         positions: np.ndarray[tuple[int, int], np.dtype[np.bool_]],
         layer_access_sites: np.ndarray | None,
+        blocked_sites: np.ndarray | None,
     ) -> np.ndarray:
         _ = layer_access_sites
+        _ = blocked_sites
         energies = self._get_energy_landscape(positions=positions)
 
         rows, cols = np.nonzero(positions)
@@ -153,7 +155,9 @@ class BaseRateHoppingCalculator(HoppingCalculator):
         positions: np.ndarray[tuple[int, int], np.dtype[np.bool_]],
         layers: np.ndarray | None,
     ) -> tuple[list[np.ndarray], list[np.ndarray]]:
-        rates = self._get_rates(positions=positions, layer_access_sites=None)
+        rates = self._get_rates(
+            positions=positions, layer_access_sites=None, blocked_sites=None
+        )
         row_sums = rates.sum(axis=1)
         over_rows = row_sums > 1.0
         rates[over_rows] /= row_sums[over_rows, None]

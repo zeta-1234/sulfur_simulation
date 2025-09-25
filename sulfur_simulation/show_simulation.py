@@ -94,7 +94,7 @@ def animate_particle_positions(
 
 
 def get_timeframe_str(
-    positions: np.ndarray[tuple[int, int], np.dtype[np.bool_]],
+    positions: np.ndarray[tuple[int, int, int], np.dtype[np.bool_]],
     timestep: int,
     params: SimulationParameters,
 ) -> str:
@@ -134,9 +134,7 @@ def plot_mean_jump_rates(
 
     indices = np.arange(mean_jump_count.shape[0], dtype=np.int_)
     ax.bar(indices - width / 2, mean_jump_count, width, label="Successful jumps")
-    attempted_jump_count = np.array(
-        [result.attempted_jump_counter for result in results]
-    )
+    attempted_jump_count = np.array([result.attempted_jump_count for result in results])
     mean_attempted_jump_count = attempted_jump_count.mean(axis=0)
     ax.bar(
         indices + width / 2, mean_attempted_jump_count, width, label="Attempted jumps"
