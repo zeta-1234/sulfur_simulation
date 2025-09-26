@@ -135,6 +135,7 @@ class SulfurNickelHoppingCalculator(InteractingHoppingCalculator):
         positions: np.ndarray[tuple[int, int], np.dtype[np.bool_]],
         layer_access_sites: np.ndarray | None,
         blocked_sites: np.ndarray | None,
+        layer_edge_sites: np.ndarray,
     ) -> list[np.ndarray]:
         energies = self._get_energy_landscape(positions=positions)
         rows, cols = np.nonzero(positions)
@@ -249,10 +250,18 @@ class SulfurNickelHoppingCalculator(InteractingHoppingCalculator):
             layer_indices_mirrored=self._layer_tiling_indices_mirrored,
         )
 
+        layer_edge_sites = _get_layer_edge_sites(
+            layers=layers,
+            layer_data=self._layer_data,
+            layer_indices=self._layer_tiling_indices,
+            layer_indices_mirrored=self._layer_tiling_indices_mirrored,
+        )
+
         rates = self._get_rates_with_layers(
             positions=positions,
             layer_access_sites=layer_access_sites,
             blocked_sites=blocked_sites,
+            layer_edge_sites=layer_edge_sites,
         )
 
         probabilities_list: list[np.ndarray] = []
@@ -405,6 +414,48 @@ def _get_layer_access_sites(
 
     return _get_blocked_sites(
         layers=new_layers,
+        layer_data=layer_data,
+        layer_indices=layer_indices,
+        layer_indices_mirrored=layer_indices_mirrored,
+    )
+
+
+def _get_layer_edge_sites(
+    layers: np.ndarray,
+    layer_data: np.ndarray,
+    layer_indices: np.ndarray,
+    layer_indices_mirrored: np.ndarray,
+) -> np.ndarray:
+    """Find particles which can leave layers, and their destinations."""
+    num_layers, num_rows, num_columns = layers.shape
+    edge_layers = np.zeros_like(layers, dtype=bool)
+
+    neighbour_offsets = [
+        (-1, 0),
+        (1, 0),
+        (0, -1),
+        (0, 1),
+    ]
+
+    for dz in range(num_layers):
+        true_positions = np.argwhere(layers[dz])
+
+        for row, col in true_positions:
+            for dr, dc in neighbour_offsets:
+                rr = row + dr
+                cc = col + dc
+                if (
+                    rr < 0
+                    or rr >= num_rows
+                    or cc < 0
+                    or cc >= num_columns
+                    or not layers[dz, rr, cc]
+                ):
+                    edge_layers[dz, row, col] = True
+                    break
+
+    return _get_blocked_sites(
+        layers=edge_layers,
         layer_data=layer_data,
         layer_indices=layer_indices,
         layer_indices_mirrored=layer_indices_mirrored,
