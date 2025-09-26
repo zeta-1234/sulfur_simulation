@@ -140,6 +140,8 @@ class SulfurNickelHoppingCalculator(InteractingHoppingCalculator):
         energies = self._get_energy_landscape(positions=positions)
         rows, cols = np.nonzero(positions)
 
+        _ = layer_edge_sites  # filler to stop error, will need to use this array to generate probabilities and destinations
+
         delta = JUMP_DIRECTIONS
         beta = 1 / (2 * Boltzmann * self._temperature)
         max_exp_arg = np.log(1 / np.min(self._baserate.grid[self._baserate.grid > 0]))
